@@ -74,19 +74,30 @@ def login_cmd(show_path: bool, cookies_file: Path | None) -> None:
     asyncio.run(scraper.login_interactive())
 
 
+INTERACTION_TYPES = {
+    "likes": "like",
+    "bookmarks": "bookmark",
+    "notifications": "mention",
+    "profile": "own",
+}
+
+
 @main.command()
-@click.argument("source", type=click.Choice(["likes", "bookmarks"]))
+@click.argument("source", type=click.Choice(["likes", "bookmarks", "notifications", "profile"]))
 @click.option("--limit", "max_items", default=0, help="Max items to fetch (0=unlimited)")
 @click.option("--no-headless", is_flag=True, help="Show browser window")
 @click.option("--full", is_flag=True, help="Full scrape (ignore known items)")
 @click.option("-v", "--verbose", is_flag=True, help="Show progress during scrape")
-def scrape(source: str, max_items: int, no_headless: bool, full: bool, verbose: bool) -> None:
-    """Scrape likes or bookmarks from Twitter/X."""
+@click.option("--with-replies", is_flag=True, help="Include replies (profile only)")
+def scrape(
+    source: str, max_items: int, no_headless: bool, full: bool, verbose: bool, with_replies: bool
+) -> None:
+    """Scrape likes, bookmarks, notifications, or profile from Twitter/X."""
 
     async def run() -> None:
         conn = await db.init_db()
         try:
-            interaction_type = "like" if source == "likes" else "bookmark"
+            interaction_type = INTERACTION_TYPES[source]
             known_ids = None if full else await db.get_tweet_ids(conn, interaction_type)
             if source == "likes":
                 tweets = await scraper.scrape_likes(
@@ -95,15 +106,29 @@ def scrape(source: str, max_items: int, no_headless: bool, full: bool, verbose: 
                     known_ids=known_ids,
                     verbose=verbose,
                 )
-            else:
+            elif source == "bookmarks":
                 tweets = await scraper.scrape_bookmarks(
                     max_items=max_items,
                     headless=not no_headless,
                     known_ids=known_ids,
                     verbose=verbose,
                 )
+            elif source == "notifications":
+                tweets = await scraper.scrape_notifications(
+                    max_items=max_items,
+                    headless=not no_headless,
+                    known_ids=known_ids,
+                    verbose=verbose,
+                )
+            else:
+                tweets = await scraper.scrape_profile(
+                    max_items=max_items,
+                    headless=not no_headless,
+                    known_ids=known_ids,
+                    verbose=verbose,
+                    include_replies=with_replies,
+                )
 
-            # Insert in reverse order so most-recently-liked gets highest interaction.id
             for tweet in reversed(tweets):
                 await db.upsert_tweet(
                     conn,
@@ -172,7 +197,9 @@ def _format_tweet(r: db.SearchResult, verbose: bool = False) -> str:
 
 
 @main.command("list")
-@click.option("--type", "interaction_type", type=click.Choice(["like", "bookmark"]))
+@click.option(
+    "--type", "interaction_type", type=click.Choice(["like", "bookmark", "mention", "own"])
+)
 @click.option("--limit", default=50, help="Max results")
 @click.option("-v", "--verbose", is_flag=True, help="Show full tweet text")
 def list_cmd(interaction_type: str | None, limit: int, verbose: bool) -> None:
@@ -200,7 +227,9 @@ def list_cmd(interaction_type: str | None, limit: int, verbose: bool) -> None:
 
 @main.command()
 @click.argument("query")
-@click.option("--type", "interaction_type", type=click.Choice(["like", "bookmark"]))
+@click.option(
+    "--type", "interaction_type", type=click.Choice(["like", "bookmark", "mention", "own"])
+)
 @click.option("--limit", default=50, help="Max results")
 @click.option("-v", "--verbose", is_flag=True, help="Show full tweet text")
 def search(query: str, interaction_type: str | None, limit: int, verbose: bool) -> None:

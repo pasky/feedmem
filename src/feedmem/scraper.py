@@ -151,13 +151,52 @@ def parse_tweet_from_graphql(entry: dict[str, Any]) -> TweetData | None:
         return None
 
 
+def extract_instructions_user_timeline(data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Extract instructions from user timeline responses (Likes, UserTweets, etc.)."""
+    return (
+        data.get("data", {})
+        .get("user", {})
+        .get("result", {})
+        .get("timeline", {})
+        .get("timeline", {})
+        .get("instructions", [])
+    )
+
+
+def extract_instructions_bookmarks(data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Extract instructions from bookmarks response."""
+    return (
+        data.get("data", {})
+        .get("bookmark_timeline_v2", {})
+        .get("timeline", {})
+        .get("instructions", [])
+    )
+
+
+def extract_instructions_notifications(data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Extract instructions from notifications response."""
+    return (
+        data.get("data", {})
+        .get("viewer", {})
+        .get("user_results", {})
+        .get("result", {})
+        .get("timeline", {})
+        .get("timeline", {})
+        .get("instructions", [])
+    )
+
+
 class TweetCollector:
     """Collects tweets from intercepted GraphQL responses."""
 
     STOP_AFTER_CONSECUTIVE_KNOWN = 10
 
     def __init__(
-        self, interaction_type: str, known_ids: set[str] | None = None, verbose: bool = False
+        self,
+        interaction_type: str,
+        known_ids: set[str] | None = None,
+        verbose: bool = False,
+        extractor: str = "user_timeline",
     ) -> None:
         self.tweets: list[TweetData] = []
         self.interaction_type = interaction_type
@@ -166,6 +205,7 @@ class TweetCollector:
         self._consecutive_known: int = 0
         self.should_stop: bool = False
         self._verbose = verbose
+        self._extractor = extractor
 
     @property
     def consecutive_known(self) -> int:
@@ -185,14 +225,12 @@ class TweetCollector:
                 raise
 
     def extract_tweets(self, data: dict[str, Any]) -> None:
-        instructions = (
-            data.get("data", {})
-            .get("user", {})
-            .get("result", {})
-            .get("timeline", {})
-            .get("timeline", {})
-            .get("instructions", [])
-        )
+        if self._extractor == "bookmarks":
+            instructions = extract_instructions_bookmarks(data)
+        elif self._extractor == "notifications":
+            instructions = extract_instructions_notifications(data)
+        else:
+            instructions = extract_instructions_user_timeline(data)
 
         for instruction in instructions:
             entries = instruction.get("entries", [])
@@ -257,6 +295,55 @@ async def scrape_bookmarks(
         scroll_delay_ms=scroll_delay_ms,
         known_ids=known_ids,
         verbose=verbose,
+        extractor="bookmarks",
+    )
+
+
+async def scrape_notifications(
+    max_items: int = 0,
+    headless: bool = True,
+    scroll_delay_ms: int = 500,
+    known_ids: set[str] | None = None,
+    verbose: bool = False,
+) -> list[TweetData]:
+    """Scrape notifications (mentions/replies to you) from Twitter/X."""
+    return await _scrape_timeline(
+        endpoint_pattern="**/Notifications?*",
+        url_path="/notifications/mentions",
+        interaction_type="mention",
+        max_items=max_items,
+        headless=headless,
+        scroll_delay_ms=scroll_delay_ms,
+        known_ids=known_ids,
+        verbose=verbose,
+        extractor="notifications",
+    )
+
+
+async def scrape_profile(
+    max_items: int = 0,
+    headless: bool = True,
+    scroll_delay_ms: int = 500,
+    known_ids: set[str] | None = None,
+    verbose: bool = False,
+    include_replies: bool = False,
+) -> list[TweetData]:
+    """Scrape your own posts (and optionally replies) from Twitter/X."""
+    if include_replies:
+        endpoint_pattern = "**/UserTweetsAndReplies?*"
+        url_suffix = "/with_replies"
+    else:
+        endpoint_pattern = "**/UserTweets?*"
+        url_suffix = ""
+    return await _scrape_timeline(
+        endpoint_pattern=endpoint_pattern,
+        url_path=f"/PROFILE{url_suffix}",
+        interaction_type="own",
+        max_items=max_items,
+        headless=headless,
+        scroll_delay_ms=scroll_delay_ms,
+        known_ids=known_ids,
+        verbose=verbose,
     )
 
 
@@ -269,6 +356,7 @@ async def _scrape_timeline(
     scroll_delay_ms: int,
     known_ids: set[str] | None = None,
     verbose: bool = False,
+    extractor: str = "user_timeline",
 ) -> list[TweetData]:
     """Generic timeline scraper using GraphQL interception."""
     if not has_auth_state():
@@ -278,7 +366,9 @@ async def _scrape_timeline(
         known_count = len(known_ids) if known_ids else 0
         print(f"Starting {interaction_type} scrape (known: {known_count} items)")
 
-    collector = TweetCollector(interaction_type, known_ids=known_ids, verbose=verbose)
+    collector = TweetCollector(
+        interaction_type, known_ids=known_ids, verbose=verbose, extractor=extractor
+    )
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=headless)
@@ -290,6 +380,8 @@ async def _scrape_timeline(
         username = await _get_username(page)
         if url_path == "/likes":
             url_path = f"/{username}/likes"
+        elif "/PROFILE" in url_path:
+            url_path = url_path.replace("/PROFILE", f"/{username}")
 
         await page.goto(f"{TWITTER_URL}{url_path}")
         await page.wait_for_load_state("domcontentloaded")

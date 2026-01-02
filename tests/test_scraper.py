@@ -5,6 +5,9 @@ from typing import Any
 
 from feedmem.scraper import (
     TweetCollector,
+    extract_instructions_bookmarks,
+    extract_instructions_notifications,
+    extract_instructions_user_timeline,
     get_auth_state_path,
     has_auth_state,
     parse_tweet_from_graphql,
@@ -345,6 +348,81 @@ def test_tweet_collector_resets_consecutive_on_new() -> None:
     assert {t["id"] for t in collector.tweets} == {"new1", "new2"}
     assert collector.should_stop is False
     assert collector.consecutive_known == 1
+
+
+def test_extract_instructions_user_timeline() -> None:
+    data = {
+        "data": {
+            "user": {
+                "result": {"timeline": {"timeline": {"instructions": [{"type": "AddEntries"}]}}}
+            }
+        }
+    }
+    result = extract_instructions_user_timeline(data)
+    assert result == [{"type": "AddEntries"}]
+    assert extract_instructions_user_timeline({}) == []
+
+
+def test_extract_instructions_bookmarks() -> None:
+    data = {
+        "data": {"bookmark_timeline_v2": {"timeline": {"instructions": [{"type": "AddEntries"}]}}}
+    }
+    result = extract_instructions_bookmarks(data)
+    assert result == [{"type": "AddEntries"}]
+    assert extract_instructions_bookmarks({}) == []
+
+
+def test_extract_instructions_notifications() -> None:
+    data = {
+        "data": {
+            "viewer": {
+                "user_results": {
+                    "result": {"timeline": {"timeline": {"instructions": [{"type": "AddEntries"}]}}}
+                }
+            }
+        }
+    }
+    result = extract_instructions_notifications(data)
+    assert result == [{"type": "AddEntries"}]
+    assert extract_instructions_notifications({}) == []
+
+
+def test_tweet_collector_with_bookmarks_extractor() -> None:
+    collector = TweetCollector("bookmark", extractor="bookmarks")
+    data = {
+        "data": {
+            "bookmark_timeline_v2": {
+                "timeline": {"instructions": [{"entries": [_make_entry("bk1", "Bookmarked")]}]}
+            }
+        }
+    }
+    collector.extract_tweets(data)
+    assert len(collector.tweets) == 1
+    assert collector.tweets[0]["id"] == "bk1"
+    assert collector.tweets[0]["interaction_type"] == "bookmark"
+
+
+def test_tweet_collector_with_notifications_extractor() -> None:
+    collector = TweetCollector("mention", extractor="notifications")
+    data = {
+        "data": {
+            "viewer": {
+                "user_results": {
+                    "result": {
+                        "timeline": {
+                            "timeline": {
+                                "instructions": [{"entries": [_make_entry("notif1", "Mentioned")]}]
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    collector.extract_tweets(data)
+    assert len(collector.tweets) == 1
+    assert collector.tweets[0]["id"] == "notif1"
+    assert collector.tweets[0]["interaction_type"] == "mention"
 
 
 def _make_entry(tweet_id: str, text: str) -> dict[str, Any]:
