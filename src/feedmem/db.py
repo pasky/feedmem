@@ -122,8 +122,20 @@ async def upsert_tweet(
             metrics_replies = excluded.metrics_replies,
             raw_json = excluded.raw_json
         """,
-        (id, author_id, author_handle, author_name, content, created_at,
-         reply_to_id, thread_id, metrics_likes, metrics_retweets, metrics_replies, raw_json),
+        (
+            id,
+            author_id,
+            author_handle,
+            author_name,
+            content,
+            created_at,
+            reply_to_id,
+            thread_id,
+            metrics_likes,
+            metrics_retweets,
+            metrics_replies,
+            raw_json,
+        ),
     )
     await db.commit()
 

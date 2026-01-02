@@ -40,11 +40,19 @@ async def test_upsert_and_search(db: aiosqlite.Connection) -> None:
 @pytest.mark.asyncio
 async def test_search_by_interaction_type(db: aiosqlite.Connection) -> None:
     await upsert_tweet(
-        db, id="1", author_id="u1", author_handle="alice", content="cats are great",
+        db,
+        id="1",
+        author_id="u1",
+        author_handle="alice",
+        content="cats are great",
         created_at="2024-01-01T00:00:00Z",
     )
     await upsert_tweet(
-        db, id="2", author_id="u2", author_handle="bob", content="cats rule",
+        db,
+        id="2",
+        author_id="u2",
+        author_handle="bob",
+        content="cats rule",
         created_at="2024-01-02T00:00:00Z",
     )
     await add_interaction(db, type="like", tweet_id="1", timestamp="2024-01-01T01:00:00Z")
@@ -62,12 +70,22 @@ async def test_search_by_interaction_type(db: aiosqlite.Connection) -> None:
 @pytest.mark.asyncio
 async def test_upsert_updates_existing(db: aiosqlite.Connection) -> None:
     await upsert_tweet(
-        db, id="999", author_id="u1", author_handle="test", content="original",
-        created_at="2024-01-01T00:00:00Z", metrics_likes=10,
+        db,
+        id="999",
+        author_id="u1",
+        author_handle="test",
+        content="original",
+        created_at="2024-01-01T00:00:00Z",
+        metrics_likes=10,
     )
     await upsert_tweet(
-        db, id="999", author_id="u1", author_handle="test", content="updated content",
-        created_at="2024-01-01T00:00:00Z", metrics_likes=50,
+        db,
+        id="999",
+        author_id="u1",
+        author_handle="test",
+        content="updated content",
+        created_at="2024-01-01T00:00:00Z",
+        metrics_likes=50,
     )
     results = await search_tweets(db, "updated")
     assert len(results) == 1

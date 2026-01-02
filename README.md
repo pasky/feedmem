@@ -57,7 +57,7 @@ If login works locally but you need to scrape on a headless server:
    # Find where auth state is stored
    feedmem login --show-path
    # Usually: ~/.local/share/feedmem/auth_state.json
-   
+
    # Copy to server (create dir first)
    ssh server 'mkdir -p ~/.local/share/feedmem'
    scp ~/.local/share/feedmem/auth_state.json server:~/.local/share/feedmem/

@@ -6,7 +6,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from playwright.async_api import Error as PlaywrightError, Page, Route, async_playwright
+from playwright.async_api import Error as PlaywrightError
+from playwright.async_api import Page, Route, async_playwright
 
 AUTH_STATE_PATH = Path.home() / ".local" / "share" / "feedmem" / "auth_state.json"
 TWITTER_URL = "https://x.com"
@@ -165,6 +166,10 @@ class TweetCollector:
         self.should_stop: bool = False
         self._verbose = verbose
 
+    @property
+    def consecutive_known(self) -> int:
+        return self._consecutive_known
+
     async def handle_response(self, route: Route) -> None:
         try:
             response = await route.fetch()
@@ -197,11 +202,11 @@ class TweetCollector:
                     if tweet["id"] in self._known_ids:
                         self._consecutive_known += 1
                         if self._verbose:
-                            print(f"  [known] @{tweet['author_handle']}: {tweet['content'][:50]}... ({self._consecutive_known}/{self.STOP_AFTER_CONSECUTIVE_KNOWN})")
-                        if (
-                            self._consecutive_known
-                            >= self.STOP_AFTER_CONSECUTIVE_KNOWN
-                        ):
+                            handle = tweet["author_handle"]
+                            preview = tweet["content"][:50]
+                            count = f"{self._consecutive_known}/{self.STOP_AFTER_CONSECUTIVE_KNOWN}"
+                            print(f"  [known] @{handle}: {preview}... ({count})")
+                        if self._consecutive_known >= self.STOP_AFTER_CONSECUTIVE_KNOWN:
                             self.should_stop = True
                         continue
                     self._consecutive_known = 0
@@ -209,7 +214,9 @@ class TweetCollector:
                     tweet["interaction_timestamp"] = datetime.now().isoformat()
                     self.tweets.append(tweet)
                     if self._verbose:
-                        print(f"  [new #{len(self.tweets)}] @{tweet['author_handle']}: {tweet['content'][:50]}...")
+                        handle = tweet["author_handle"]
+                        preview = tweet["content"][:50]
+                        print(f"  [new #{len(self.tweets)}] @{handle}: {preview}...")
 
 
 async def scrape_likes(
@@ -267,7 +274,8 @@ async def _scrape_timeline(
         raise RuntimeError("Not logged in. Run 'feedmem login' first.")
 
     if verbose:
-        print(f"Starting {interaction_type} scrape (known: {len(known_ids or set())} items)")
+        known_count = len(known_ids) if known_ids else 0
+        print(f"Starting {interaction_type} scrape (known: {known_count} items)")
 
     collector = TweetCollector(interaction_type, known_ids=known_ids, verbose=verbose)
 

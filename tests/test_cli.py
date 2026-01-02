@@ -44,9 +44,7 @@ def test_ingest_command(tmp_path: Path) -> None:
         runner.isolated_filesystem(temp_dir=tmp_path),
         patch("feedmem.db.get_default_db_path", return_value=tmp_path / "test.db"),
     ):
-        result = runner.invoke(
-            main, ["ingest", str(archive_path), "--username", "testuser"]
-        )
+        result = runner.invoke(main, ["ingest", str(archive_path), "--username", "testuser"])
     assert result.exit_code == 0
     assert "Ingested 1 tweets" in result.output
 

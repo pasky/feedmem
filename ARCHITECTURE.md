@@ -80,7 +80,7 @@ Twitter archive structure:
 data/
 ├── tweets.js           # Your tweets
 ├── like.js             # Liked tweet IDs (not full content!)
-├── bookmark.js         # Bookmarked tweet IDs  
+├── bookmark.js         # Bookmarked tweet IDs
 ├── direct-messages.js  # DMs
 ├── follower.js / following.js
 └── ...

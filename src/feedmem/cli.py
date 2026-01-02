@@ -57,8 +57,10 @@ def ingest(archive_path: Path, username: str) -> None:
 @main.command("login")
 @click.option("--show-path", is_flag=True, help="Show auth state path (for scp to servers)")
 @click.option(
-    "--cookies", "cookies_file", type=click.Path(exists=True, path_type=Path),
-    help="Import cookies from JSON file (Cookie-Editor extension format)"
+    "--cookies",
+    "cookies_file",
+    type=click.Path(exists=True, path_type=Path),
+    help="Import cookies from JSON file (Cookie-Editor extension format)",
 )
 def login_cmd(show_path: bool, cookies_file: Path | None) -> None:
     """Interactive browser login to Twitter/X, or import cookies."""
@@ -88,11 +90,17 @@ def scrape(source: str, max_items: int, no_headless: bool, full: bool, verbose: 
             known_ids = None if full else await db.get_tweet_ids(conn, interaction_type)
             if source == "likes":
                 tweets = await scraper.scrape_likes(
-                    max_items=max_items, headless=not no_headless, known_ids=known_ids, verbose=verbose
+                    max_items=max_items,
+                    headless=not no_headless,
+                    known_ids=known_ids,
+                    verbose=verbose,
                 )
             else:
                 tweets = await scraper.scrape_bookmarks(
-                    max_items=max_items, headless=not no_headless, known_ids=known_ids, verbose=verbose
+                    max_items=max_items,
+                    headless=not no_headless,
+                    known_ids=known_ids,
+                    verbose=verbose,
                 )
 
             # Insert in reverse order so most-recently-liked gets highest interaction.id
@@ -146,7 +154,7 @@ def _format_tweet(r: db.SearchResult, verbose: bool = False) -> str:
     lines.append(content)
     lines.append(f"  https://x.com/{handle}/status/{r['id']}")
 
-    metrics = []
+    metrics: list[str] = []
     if r.get("metrics_likes") is not None:
         metrics.append(f"♥ {r['metrics_likes']}")
     if r.get("metrics_retweets") is not None:
@@ -173,9 +181,7 @@ def list_cmd(interaction_type: str | None, limit: int, verbose: bool) -> None:
     async def run() -> list[db.SearchResult]:
         conn = await db.init_db()
         try:
-            return await db.list_tweets(
-                conn, interaction_type=interaction_type, limit=limit
-            )
+            return await db.list_tweets(conn, interaction_type=interaction_type, limit=limit)
         finally:
             await conn.close()
 

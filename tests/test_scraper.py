@@ -248,9 +248,7 @@ def test_tweet_collector_adds_interaction_metadata() -> None:
             "user": {
                 "result": {
                     "timeline": {
-                        "timeline": {
-                            "instructions": [{"entries": [_make_entry("999", "Test")]}]
-                        }
+                        "timeline": {"instructions": [{"entries": [_make_entry("999", "Test")]}]}
                     }
                 }
             }
@@ -346,7 +344,7 @@ def test_tweet_collector_resets_consecutive_on_new() -> None:
     assert len(collector.tweets) == 2
     assert {t["id"] for t in collector.tweets} == {"new1", "new2"}
     assert collector.should_stop is False
-    assert collector._consecutive_known == 1
+    assert collector.consecutive_known == 1
 
 
 def _make_entry(tweet_id: str, text: str) -> dict[str, Any]:
