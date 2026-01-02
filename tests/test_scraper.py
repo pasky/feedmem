@@ -173,6 +173,51 @@ def test_parse_tweet_from_graphql_with_reply() -> None:
     assert tweet["reply_to_id"] == "original999"
 
 
+def test_parse_tweet_from_graphql_conversation_thread() -> None:
+    """Test parsing replies from conversation thread entries (profile timeline format)."""
+    entry = {
+        "content": {
+            "items": [
+                {
+                    "item": {
+                        "itemContent": {
+                            "tweet_results": {
+                                "result": {
+                                    "__typename": "Tweet",
+                                    "rest_id": "thread123",
+                                    "legacy": {
+                                        "full_text": "Reply in thread",
+                                        "created_at": "Fri Jan 19 14:00:00 +0000 2024",
+                                        "in_reply_to_status_id_str": "parent456",
+                                    },
+                                    "core": {
+                                        "user_results": {
+                                            "result": {
+                                                "rest_id": "threaduser",
+                                                "legacy": {
+                                                    "screen_name": "threaduser",
+                                                    "name": "Thread User",
+                                                },
+                                            }
+                                        }
+                                    },
+                                }
+                            }
+                        }
+                    }
+                }
+            ]
+        }
+    }
+
+    tweet = parse_tweet_from_graphql(entry)
+    assert tweet is not None
+    assert tweet["id"] == "thread123"
+    assert tweet["content"] == "Reply in thread"
+    assert tweet["reply_to_id"] == "parent456"
+    assert tweet["author_handle"] == "threaduser"
+
+
 def test_parse_tweet_from_graphql_invalid_typename() -> None:
     entry = {
         "content": {

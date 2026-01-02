@@ -106,7 +106,17 @@ def parse_tweet_from_graphql(entry: dict[str, Any]) -> TweetData | None:
     """Extract tweet data from Twitter's GraphQL response format."""
     try:
         content = entry.get("content", {})
-        item_content = content.get("itemContent", {})
+        item_content = content.get("itemContent")
+
+        # Handle conversation thread entries (replies appear this way)
+        if item_content is None and "items" in content:
+            items = content.get("items", [])
+            if items:
+                item_content = items[0].get("item", {}).get("itemContent", {})
+
+        if not item_content:
+            return None
+
         tweet_results = item_content.get("tweet_results", {})
         result = tweet_results.get("result", {})
 
