@@ -80,7 +80,7 @@ feedmem login --show-path                  # Show auth state path (for scp)
 # Scraping (requires login first)
 feedmem scrape likes                       # Scrape all your likes
 feedmem scrape bookmarks                   # Scrape all bookmarks
-feedmem scrape likes --max 100             # Limit to 100 items
+feedmem scrape likes --limit 100           # Limit to 100 items
 feedmem scrape likes --no-headless         # Show browser (for debugging)
 
 # Import GDPR archive (your own tweets)
@@ -112,16 +112,15 @@ uv run pytest --cov=feedmem   # With coverage
 
 Twitter's API free tier is write-only—you can't read your own likes or bookmarks. GDPR exports only contain tweet IDs for likes/bookmarks, not content.
 
-feedmem uses Playwright to run a headless browser with your logged-in session, intercepting GraphQL responses to capture full tweet data as you scroll through your likes/bookmarks pages.
+feedmem uses Playwright to run a headless browser with your logged-in session, intercepting GraphQL responses to capture full tweet data as it scrolls through your likes/bookmarks pages.
 
 ## Roadmap
 
 - [ ] `feedmem scrape notifications` — mentions, replies to you
-- [ ] `feedmem scrape timeline` — your home feed
+- [ ] `feedmem scrape profile` — your posts and replies
 - [ ] Semantic search with embeddings
 - [ ] Image OCR for meme search
-- [ ] Chrome extension for live capture
-- [ ] Bluesky/Mastodon support
+- [ ] Chrome extension for live capture (particularly of what you see)
 
 ## License
 
