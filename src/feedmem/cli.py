@@ -191,6 +191,9 @@ def list_cmd(interaction_type: str | None, limit: int, verbose: bool) -> None:
         return
 
     for r in results:
+        click.echo(
+            "--------------------------------------------------------------------------------"
+        )
         click.echo(_format_tweet(r, verbose))
         click.echo()
 
