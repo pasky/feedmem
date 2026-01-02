@@ -171,6 +171,54 @@ async def add_media(
 SearchResult = dict[str, Any]
 
 
+async def list_tweets(
+    db: aiosqlite.Connection,
+    *,
+    interaction_type: str | None = None,
+    limit: int = 50,
+) -> list[SearchResult]:
+    sql = """
+        SELECT t.id, t.author_id, t.author_handle, t.author_name, t.content, t.created_at,
+               t.reply_to_id, t.metrics_likes, t.metrics_retweets, t.metrics_replies,
+               i.type as interaction_type, i.timestamp as interaction_timestamp,
+               GROUP_CONCAT(m.url, ' ') as media_urls
+        FROM tweet t
+        LEFT JOIN interaction i ON i.tweet_id = t.id
+        LEFT JOIN media m ON m.tweet_id = t.id
+        WHERE 1=1
+    """
+    params: list[str | int] = []
+    if interaction_type:
+        sql += " AND i.type = ?"
+        params.append(interaction_type)
+    sql += " GROUP BY t.id ORDER BY i.id DESC LIMIT ?"
+    params.append(limit)
+
+    async with db.execute(sql, params) as cursor:
+        rows = await cursor.fetchall()
+        columns = [d[0] for d in cursor.description] if cursor.description else []
+        return [dict(zip(columns, row, strict=False)) for row in rows]
+
+
+async def get_tweet_ids(
+    db: aiosqlite.Connection,
+    interaction_type: str | None = None,
+) -> set[str]:
+    """Get all known tweet IDs, optionally filtered by interaction type."""
+    if interaction_type:
+        sql = """
+            SELECT DISTINCT t.id FROM tweet t
+            JOIN interaction i ON i.tweet_id = t.id
+            WHERE i.type = ?
+        """
+        async with db.execute(sql, (interaction_type,)) as cursor:
+            rows = await cursor.fetchall()
+    else:
+        async with db.execute("SELECT id FROM tweet") as cursor:
+            rows = await cursor.fetchall()
+    return {row[0] for row in rows}
+
+
 async def search_tweets(
     db: aiosqlite.Connection,
     query: str,

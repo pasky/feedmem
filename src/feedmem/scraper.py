@@ -6,10 +6,21 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from playwright.async_api import Page, Route, async_playwright
+from playwright.async_api import Error as PlaywrightError, Page, Route, async_playwright
 
 AUTH_STATE_PATH = Path.home() / ".local" / "share" / "feedmem" / "auth_state.json"
 TWITTER_URL = "https://x.com"
+
+
+def parse_twitter_timestamp(ts: str) -> str:
+    """Convert Twitter timestamp to ISO format. Returns original if parsing fails."""
+    if not ts:
+        return ts
+    try:
+        dt = datetime.strptime(ts, "%a %b %d %H:%M:%S %z %Y")
+        return dt.isoformat()
+    except ValueError:
+        return ts
 
 
 async def login_interactive() -> None:
@@ -64,7 +75,12 @@ def import_cookies_from_json(cookies_file: Path) -> None:
         if c.get("httpOnly"):
             cookie["httpOnly"] = True
         if c.get("sameSite"):
-            cookie["sameSite"] = c["sameSite"].capitalize()
+            same_site = c["sameSite"].lower()
+            if same_site == "no_restriction":
+                cookie["sameSite"] = "None"
+            elif same_site in ("strict", "lax"):
+                cookie["sameSite"] = same_site.capitalize()
+            # Skip invalid/unknown values
         playwright_cookies.append(cookie)
 
     # Create Playwright storage state format
@@ -102,6 +118,7 @@ def parse_tweet_from_graphql(entry: dict[str, Any]) -> TweetData | None:
         core = result.get("core", {})
         user_results = core.get("user_results", {}).get("result", {})
         user_legacy = user_results.get("legacy", {})
+        user_core = user_results.get("core", {})
 
         tweet_id = result.get("rest_id")
         if not tweet_id:
@@ -110,10 +127,10 @@ def parse_tweet_from_graphql(entry: dict[str, Any]) -> TweetData | None:
         return {
             "id": tweet_id,
             "author_id": user_results.get("rest_id", ""),
-            "author_handle": user_legacy.get("screen_name", ""),
-            "author_name": user_legacy.get("name", ""),
+            "author_handle": user_core.get("screen_name") or user_legacy.get("screen_name", ""),
+            "author_name": user_core.get("name") or user_legacy.get("name", ""),
             "content": legacy.get("full_text", ""),
-            "created_at": legacy.get("created_at", ""),
+            "created_at": parse_twitter_timestamp(legacy.get("created_at", "")),
             "reply_to_id": legacy.get("in_reply_to_status_id_str"),
             "metrics_likes": legacy.get("favorite_count"),
             "metrics_retweets": legacy.get("retweet_count"),
@@ -135,19 +152,31 @@ def parse_tweet_from_graphql(entry: dict[str, Any]) -> TweetData | None:
 class TweetCollector:
     """Collects tweets from intercepted GraphQL responses."""
 
-    def __init__(self, interaction_type: str) -> None:
+    STOP_AFTER_CONSECUTIVE_KNOWN = 10
+
+    def __init__(
+        self, interaction_type: str, known_ids: set[str] | None = None, verbose: bool = False
+    ) -> None:
         self.tweets: list[TweetData] = []
         self.interaction_type = interaction_type
         self._seen_ids: set[str] = set()
+        self._known_ids: set[str] = known_ids or set()
+        self._consecutive_known: int = 0
+        self.should_stop: bool = False
+        self._verbose = verbose
 
     async def handle_response(self, route: Route) -> None:
-        response = await route.fetch()
         try:
-            body = await response.json()
-            self.extract_tweets(body)
-        except (json.JSONDecodeError, ValueError):
-            pass
-        await route.fulfill(response=response)
+            response = await route.fetch()
+            try:
+                body = await response.json()
+                self.extract_tweets(body)
+            except (json.JSONDecodeError, ValueError):
+                pass
+            await route.fulfill(response=response)
+        except PlaywrightError as e:
+            if "disposed" not in str(e):
+                raise
 
     def extract_tweets(self, data: dict[str, Any]) -> None:
         instructions = (
@@ -165,15 +194,30 @@ class TweetCollector:
                 tweet = parse_tweet_from_graphql(entry)
                 if tweet and tweet["id"] not in self._seen_ids:
                     self._seen_ids.add(tweet["id"])
+                    if tweet["id"] in self._known_ids:
+                        self._consecutive_known += 1
+                        if self._verbose:
+                            print(f"  [known] @{tweet['author_handle']}: {tweet['content'][:50]}... ({self._consecutive_known}/{self.STOP_AFTER_CONSECUTIVE_KNOWN})")
+                        if (
+                            self._consecutive_known
+                            >= self.STOP_AFTER_CONSECUTIVE_KNOWN
+                        ):
+                            self.should_stop = True
+                        continue
+                    self._consecutive_known = 0
                     tweet["interaction_type"] = self.interaction_type
                     tweet["interaction_timestamp"] = datetime.now().isoformat()
                     self.tweets.append(tweet)
+                    if self._verbose:
+                        print(f"  [new #{len(self.tweets)}] @{tweet['author_handle']}: {tweet['content'][:50]}...")
 
 
 async def scrape_likes(
     max_items: int = 0,
     headless: bool = True,
     scroll_delay_ms: int = 500,
+    known_ids: set[str] | None = None,
+    verbose: bool = False,
 ) -> list[TweetData]:
     """Scrape liked tweets from Twitter/X."""
     return await _scrape_timeline(
@@ -183,6 +227,8 @@ async def scrape_likes(
         max_items=max_items,
         headless=headless,
         scroll_delay_ms=scroll_delay_ms,
+        known_ids=known_ids,
+        verbose=verbose,
     )
 
 
@@ -190,6 +236,8 @@ async def scrape_bookmarks(
     max_items: int = 0,
     headless: bool = True,
     scroll_delay_ms: int = 500,
+    known_ids: set[str] | None = None,
+    verbose: bool = False,
 ) -> list[TweetData]:
     """Scrape bookmarked tweets from Twitter/X."""
     return await _scrape_timeline(
@@ -199,6 +247,8 @@ async def scrape_bookmarks(
         max_items=max_items,
         headless=headless,
         scroll_delay_ms=scroll_delay_ms,
+        known_ids=known_ids,
+        verbose=verbose,
     )
 
 
@@ -209,12 +259,17 @@ async def _scrape_timeline(
     max_items: int,
     headless: bool,
     scroll_delay_ms: int,
+    known_ids: set[str] | None = None,
+    verbose: bool = False,
 ) -> list[TweetData]:
     """Generic timeline scraper using GraphQL interception."""
     if not has_auth_state():
         raise RuntimeError("Not logged in. Run 'feedmem login' first.")
 
-    collector = TweetCollector(interaction_type)
+    if verbose:
+        print(f"Starting {interaction_type} scrape (known: {len(known_ids or set())} items)")
+
+    collector = TweetCollector(interaction_type, known_ids=known_ids, verbose=verbose)
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=headless)
@@ -228,24 +283,34 @@ async def _scrape_timeline(
             url_path = f"/{username}/likes"
 
         await page.goto(f"{TWITTER_URL}{url_path}")
-        await page.wait_for_load_state("networkidle")
+        await page.wait_for_load_state("domcontentloaded")
+        await page.wait_for_timeout(2000)
 
         prev_count = 0
         stale_rounds = 0
+        stop_reason = "unknown"
         while True:
             await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
             await page.wait_for_timeout(scroll_delay_ms)
 
             current_count = len(collector.tweets)
             if max_items > 0 and current_count >= max_items:
+                stop_reason = f"reached limit ({max_items})"
+                break
+            if collector.should_stop:
+                stop_reason = "hit consecutive known items"
                 break
             if current_count == prev_count:
                 stale_rounds += 1
                 if stale_rounds >= 3:
+                    stop_reason = "no new items (end of list)"
                     break
             else:
                 stale_rounds = 0
             prev_count = current_count
+
+        if verbose:
+            print(f"Scrape finished: {stop_reason}, collected {len(collector.tweets)} new items")
 
         await browser.close()
 
@@ -257,10 +322,10 @@ async def _scrape_timeline(
 async def _get_username(page: Page) -> str:
     """Get current logged-in username from page."""
     await page.goto(f"{TWITTER_URL}/home")
-    await page.wait_for_load_state("networkidle")
 
     profile_link = page.locator('a[data-testid="AppTabBar_Profile_Link"]')
-    href = await profile_link.get_attribute("href", timeout=10000)
+    await profile_link.wait_for(timeout=15000)
+    href = await profile_link.get_attribute("href")
     if href:
         return href.strip("/")
     raise RuntimeError("Could not determine username")

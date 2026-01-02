@@ -74,24 +74,29 @@ def login_cmd(show_path: bool, cookies_file: Path | None) -> None:
 
 @main.command()
 @click.argument("source", type=click.Choice(["likes", "bookmarks"]))
-@click.option("--max", "max_items", default=0, help="Max items to fetch (0=unlimited)")
+@click.option("--limit", "max_items", default=0, help="Max items to fetch (0=unlimited)")
 @click.option("--no-headless", is_flag=True, help="Show browser window")
-def scrape(source: str, max_items: int, no_headless: bool) -> None:
+@click.option("--full", is_flag=True, help="Full scrape (ignore known items)")
+@click.option("-v", "--verbose", is_flag=True, help="Show progress during scrape")
+def scrape(source: str, max_items: int, no_headless: bool, full: bool, verbose: bool) -> None:
     """Scrape likes or bookmarks from Twitter/X."""
 
     async def run() -> None:
         conn = await db.init_db()
         try:
+            interaction_type = "like" if source == "likes" else "bookmark"
+            known_ids = None if full else await db.get_tweet_ids(conn, interaction_type)
             if source == "likes":
                 tweets = await scraper.scrape_likes(
-                    max_items=max_items, headless=not no_headless
+                    max_items=max_items, headless=not no_headless, known_ids=known_ids, verbose=verbose
                 )
             else:
                 tweets = await scraper.scrape_bookmarks(
-                    max_items=max_items, headless=not no_headless
+                    max_items=max_items, headless=not no_headless, known_ids=known_ids, verbose=verbose
                 )
 
-            for tweet in tweets:
+            # Insert in reverse order so most-recently-liked gets highest interaction.id
+            for tweet in reversed(tweets):
                 await db.upsert_tweet(
                     conn,
                     id=tweet["id"],
@@ -121,18 +126,75 @@ def scrape(source: str, max_items: int, no_headless: bool) -> None:
                             url=media["url"],
                             mime_type=media.get("type"),
                         )
-            click.echo(f"Scraped {len(tweets)} {source}")
+            click.echo(f"Saved {len(tweets)} new {source}")
         finally:
             await conn.close()
 
     asyncio.run(run())
 
 
+def _format_tweet(r: db.SearchResult, verbose: bool = False) -> str:
+    """Format a tweet for display."""
+    itype = r.get("interaction_type", "")
+    prefix = f"[{itype}] " if itype else ""
+    handle = r["author_handle"] or "unknown"
+    name = r.get("author_name") or ""
+    created = r.get("created_at", "")
+    content = r["content"] if verbose else r["content"][:256]
+
+    lines = [f"{prefix}@{handle}" + (f" ({name})" if name else "") + f" - {created}"]
+    lines.append(content)
+    lines.append(f"  https://x.com/{handle}/status/{r['id']}")
+
+    metrics = []
+    if r.get("metrics_likes") is not None:
+        metrics.append(f"♥ {r['metrics_likes']}")
+    if r.get("metrics_retweets") is not None:
+        metrics.append(f"🔁 {r['metrics_retweets']}")
+    if r.get("metrics_replies") is not None:
+        metrics.append(f"💬 {r['metrics_replies']}")
+    if metrics:
+        lines.append(f"  {' | '.join(metrics)}")
+
+    if r.get("reply_to_id"):
+        lines.append(f"  ↩ Reply to: https://x.com/i/status/{r['reply_to_id']}")
+    if r.get("media_urls"):
+        lines.append(f"  Media: {r['media_urls']}")
+    return "\n".join(lines)
+
+
+@main.command("list")
+@click.option("--type", "interaction_type", type=click.Choice(["like", "bookmark"]))
+@click.option("--limit", default=50, help="Max results")
+@click.option("-v", "--verbose", is_flag=True, help="Show full tweet text")
+def list_cmd(interaction_type: str | None, limit: int, verbose: bool) -> None:
+    """List your archived tweets."""
+
+    async def run() -> list[db.SearchResult]:
+        conn = await db.init_db()
+        try:
+            return await db.list_tweets(
+                conn, interaction_type=interaction_type, limit=limit
+            )
+        finally:
+            await conn.close()
+
+    results = asyncio.run(run())
+    if not results:
+        click.echo("No tweets found.")
+        return
+
+    for r in results:
+        click.echo(_format_tweet(r, verbose))
+        click.echo()
+
+
 @main.command()
 @click.argument("query")
 @click.option("--type", "interaction_type", type=click.Choice(["like", "bookmark"]))
 @click.option("--limit", default=50, help="Max results")
-def search(query: str, interaction_type: str | None, limit: int) -> None:
+@click.option("-v", "--verbose", is_flag=True, help="Show full tweet text")
+def search(query: str, interaction_type: str | None, limit: int, verbose: bool) -> None:
     """Search your archived tweets."""
 
     async def run() -> list[db.SearchResult]:
@@ -150,10 +212,7 @@ def search(query: str, interaction_type: str | None, limit: int) -> None:
         return
 
     for r in results:
-        itype = r.get("interaction_type", "")
-        prefix = f"[{itype}] " if itype else ""
-        click.echo(f"{prefix}@{r['author_handle']}: {r['content'][:100]}")
-        click.echo(f"  https://x.com/{r['author_handle']}/status/{r['id']}")
+        click.echo(_format_tweet(r, verbose))
         click.echo()
 
 

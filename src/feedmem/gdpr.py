@@ -6,6 +6,8 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
+from feedmem.scraper import parse_twitter_timestamp
+
 TweetData = dict[str, Any]
 
 
@@ -47,7 +49,7 @@ def _parse_tweet(raw: dict[str, Any]) -> TweetData | None:
         "author_handle": "",
         "author_name": "",
         "content": raw.get("full_text", raw.get("text", "")),
-        "created_at": raw.get("created_at", ""),
+        "created_at": parse_twitter_timestamp(raw.get("created_at", "")),
         "reply_to_id": raw.get("in_reply_to_status_id_str"),
         "metrics_likes": raw.get("favorite_count"),
         "metrics_retweets": raw.get("retweet_count"),

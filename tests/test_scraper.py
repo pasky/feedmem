@@ -283,6 +283,72 @@ def test_get_auth_state_path() -> None:
     assert "feedmem" in str(path)
 
 
+def test_tweet_collector_stops_on_consecutive_known() -> None:
+    known_ids = {"k1", "k2", "k3", "k4", "k5", "k6", "k7", "k8", "k9", "k10"}
+    collector = TweetCollector("like", known_ids=known_ids)
+
+    data = {
+        "data": {
+            "user": {
+                "result": {
+                    "timeline": {
+                        "timeline": {
+                            "instructions": [
+                                {
+                                    "entries": [
+                                        _make_entry("new1", "New"),
+                                        *[_make_entry(f"k{i}", "Known") for i in range(1, 11)],
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    collector.extract_tweets(data)
+    assert len(collector.tweets) == 1
+    assert collector.tweets[0]["id"] == "new1"
+    assert collector.should_stop is True
+
+
+def test_tweet_collector_resets_consecutive_on_new() -> None:
+    known_ids = {"k1", "k2", "k3"}
+    collector = TweetCollector("like", known_ids=known_ids)
+
+    data = {
+        "data": {
+            "user": {
+                "result": {
+                    "timeline": {
+                        "timeline": {
+                            "instructions": [
+                                {
+                                    "entries": [
+                                        _make_entry("new1", "New"),
+                                        _make_entry("k1", "Known"),
+                                        _make_entry("k2", "Known"),
+                                        _make_entry("new2", "New again"),
+                                        _make_entry("k3", "Known"),
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    collector.extract_tweets(data)
+    assert len(collector.tweets) == 2
+    assert {t["id"] for t in collector.tweets} == {"new1", "new2"}
+    assert collector.should_stop is False
+    assert collector._consecutive_known == 1
+
+
 def _make_entry(tweet_id: str, text: str) -> dict[str, Any]:
     return {
         "content": {
