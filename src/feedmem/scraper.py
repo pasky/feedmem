@@ -117,7 +117,12 @@ def parse_tweet_from_graphql(entry: dict[str, Any]) -> TweetData | None:
         if not item_content:
             return None
 
-        tweet_results = item_content.get("tweet_results", {})
+        # Handle notification entries (content.itemContent.notification.tweet.tweet_results)
+        notification = item_content.get("notification", {})
+        if notification:
+            tweet_results = notification.get("tweet", {}).get("tweet_results", {})
+        else:
+            tweet_results = item_content.get("tweet_results", {})
         result = tweet_results.get("result", {})
 
         if result.get("__typename") == "TweetWithVisibilityResults":
@@ -187,10 +192,10 @@ def extract_instructions_notifications(data: dict[str, Any]) -> list[dict[str, A
     """Extract instructions from notifications response."""
     return (
         data.get("data", {})
-        .get("viewer", {})
+        .get("viewer_v2", {})
         .get("user_results", {})
         .get("result", {})
-        .get("timeline", {})
+        .get("notification_timeline", {})
         .get("timeline", {})
         .get("instructions", [])
     )

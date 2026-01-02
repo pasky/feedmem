@@ -218,6 +218,48 @@ def test_parse_tweet_from_graphql_conversation_thread() -> None:
     assert tweet["author_handle"] == "threaduser"
 
 
+def test_parse_tweet_from_graphql_notification_entry() -> None:
+    """Test parsing tweets from notification entries (different structure)."""
+    entry = {
+        "content": {
+            "itemContent": {
+                "notification": {
+                    "tweet": {
+                        "tweet_results": {
+                            "result": {
+                                "__typename": "Tweet",
+                                "rest_id": "notif789",
+                                "legacy": {
+                                    "full_text": "@you mentioned you",
+                                    "created_at": "Sat Jan 20 15:00:00 +0000 2024",
+                                    "favorite_count": 5,
+                                },
+                                "core": {
+                                    "user_results": {
+                                        "result": {
+                                            "rest_id": "mentioner",
+                                            "legacy": {
+                                                "screen_name": "mentioner",
+                                                "name": "Mentioner",
+                                            },
+                                        }
+                                    }
+                                },
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    tweet = parse_tweet_from_graphql(entry)
+    assert tweet is not None
+    assert tweet["id"] == "notif789"
+    assert tweet["author_handle"] == "mentioner"
+    assert tweet["content"] == "@you mentioned you"
+
+
 def test_parse_tweet_from_graphql_invalid_typename() -> None:
     entry = {
         "content": {
@@ -420,9 +462,13 @@ def test_extract_instructions_bookmarks() -> None:
 def test_extract_instructions_notifications() -> None:
     data = {
         "data": {
-            "viewer": {
+            "viewer_v2": {
                 "user_results": {
-                    "result": {"timeline": {"timeline": {"instructions": [{"type": "AddEntries"}]}}}
+                    "result": {
+                        "notification_timeline": {
+                            "timeline": {"instructions": [{"type": "AddEntries"}]}
+                        }
+                    }
                 }
             }
         }
@@ -451,10 +497,10 @@ def test_tweet_collector_with_notifications_extractor() -> None:
     collector = TweetCollector("mention", extractor="notifications")
     data = {
         "data": {
-            "viewer": {
+            "viewer_v2": {
                 "user_results": {
                     "result": {
-                        "timeline": {
+                        "notification_timeline": {
                             "timeline": {
                                 "instructions": [{"entries": [_make_entry("notif1", "Mentioned")]}]
                             }
