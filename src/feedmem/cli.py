@@ -82,80 +82,84 @@ INTERACTION_TYPES = {
 }
 
 
+SCRAPE_SOURCES = ["likes", "bookmarks", "notifications", "profile"]
+
+
+async def _scrape_source(
+    conn: db.aiosqlite.Connection,
+    source: str,
+    max_items: int,
+    headless: bool,
+    full: bool,
+    verbose: bool,
+) -> int:
+    """Scrape a single source and save to db. Returns count of new items."""
+    interaction_type = INTERACTION_TYPES[source]
+    known_ids = None if full else await db.get_tweet_ids(conn, interaction_type)
+
+    scrape_fn = {
+        "likes": scraper.scrape_likes,
+        "bookmarks": scraper.scrape_bookmarks,
+        "notifications": scraper.scrape_notifications,
+        "profile": scraper.scrape_profile,
+    }[source]
+
+    tweets = await scrape_fn(
+        max_items=max_items,
+        headless=headless,
+        known_ids=known_ids,
+        verbose=verbose,
+    )
+
+    for tweet in reversed(tweets):
+        await db.upsert_tweet(
+            conn,
+            id=tweet["id"],
+            author_id=tweet["author_id"],
+            author_handle=tweet["author_handle"],
+            author_name=tweet["author_name"],
+            content=tweet["content"],
+            created_at=tweet["created_at"],
+            reply_to_id=tweet.get("reply_to_id"),
+            metrics_likes=tweet.get("metrics_likes"),
+            metrics_retweets=tweet.get("metrics_retweets"),
+            metrics_replies=tweet.get("metrics_replies"),
+            raw_json=tweet.get("raw_json"),
+        )
+        await db.add_interaction(
+            conn,
+            type=tweet["interaction_type"],
+            tweet_id=tweet["id"],
+            timestamp=tweet["interaction_timestamp"],
+        )
+        for media in tweet.get("media", []):
+            if media.get("id"):
+                await db.add_media(
+                    conn,
+                    id=media["id"],
+                    tweet_id=tweet["id"],
+                    url=media["url"],
+                    mime_type=media.get("type"),
+                )
+    return len(tweets)
+
+
 @main.command()
-@click.argument("source", type=click.Choice(["likes", "bookmarks", "notifications", "profile"]))
+@click.argument("source", type=click.Choice(SCRAPE_SOURCES + ["all"]))
 @click.option("--limit", "max_items", default=100, help="Max items to fetch (0=unlimited)")
 @click.option("--no-headless", is_flag=True, help="Show browser window")
 @click.option("--full", is_flag=True, help="Full scrape (ignore known items)")
 @click.option("-v", "--verbose", is_flag=True, help="Show progress during scrape")
 def scrape(source: str, max_items: int, no_headless: bool, full: bool, verbose: bool) -> None:
-    """Scrape likes, bookmarks, notifications, or profile from Twitter/X."""
+    """Scrape likes, bookmarks, notifications, profile, or all from Twitter/X."""
+    sources = SCRAPE_SOURCES if source == "all" else [source]
 
     async def run() -> None:
         conn = await db.init_db()
         try:
-            interaction_type = INTERACTION_TYPES[source]
-            known_ids = None if full else await db.get_tweet_ids(conn, interaction_type)
-            if source == "likes":
-                tweets = await scraper.scrape_likes(
-                    max_items=max_items,
-                    headless=not no_headless,
-                    known_ids=known_ids,
-                    verbose=verbose,
-                )
-            elif source == "bookmarks":
-                tweets = await scraper.scrape_bookmarks(
-                    max_items=max_items,
-                    headless=not no_headless,
-                    known_ids=known_ids,
-                    verbose=verbose,
-                )
-            elif source == "notifications":
-                tweets = await scraper.scrape_notifications(
-                    max_items=max_items,
-                    headless=not no_headless,
-                    known_ids=known_ids,
-                    verbose=verbose,
-                )
-            else:
-                tweets = await scraper.scrape_profile(
-                    max_items=max_items,
-                    headless=not no_headless,
-                    known_ids=known_ids,
-                    verbose=verbose,
-                )
-
-            for tweet in reversed(tweets):
-                await db.upsert_tweet(
-                    conn,
-                    id=tweet["id"],
-                    author_id=tweet["author_id"],
-                    author_handle=tweet["author_handle"],
-                    author_name=tweet["author_name"],
-                    content=tweet["content"],
-                    created_at=tweet["created_at"],
-                    reply_to_id=tweet.get("reply_to_id"),
-                    metrics_likes=tweet.get("metrics_likes"),
-                    metrics_retweets=tweet.get("metrics_retweets"),
-                    metrics_replies=tweet.get("metrics_replies"),
-                    raw_json=tweet.get("raw_json"),
-                )
-                await db.add_interaction(
-                    conn,
-                    type=tweet["interaction_type"],
-                    tweet_id=tweet["id"],
-                    timestamp=tweet["interaction_timestamp"],
-                )
-                for media in tweet.get("media", []):
-                    if media.get("id"):
-                        await db.add_media(
-                            conn,
-                            id=media["id"],
-                            tweet_id=tweet["id"],
-                            url=media["url"],
-                            mime_type=media.get("type"),
-                        )
-            click.echo(f"Saved {len(tweets)} new {source}")
+            for src in sources:
+                count = await _scrape_source(conn, src, max_items, not no_headless, full, verbose)
+                click.echo(f"Saved {count} new {src}")
         finally:
             await conn.close()
 

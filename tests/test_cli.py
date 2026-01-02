@@ -5,6 +5,7 @@ import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from click.testing import CliRunner
 
 from feedmem.cli import main
@@ -95,13 +96,14 @@ def test_search_with_results(tmp_path: Path) -> None:
     assert "Python" in result.output
 
 
-def test_scrape_requires_auth(tmp_path: Path) -> None:
+@pytest.mark.parametrize("source", ["likes", "all"])
+def test_scrape_requires_auth(tmp_path: Path, source: str) -> None:
     runner = CliRunner()
     with (
         patch("feedmem.scraper.AUTH_STATE_PATH", tmp_path / "nonexistent.json"),
         patch("feedmem.db.get_default_db_path", return_value=Path(":memory:")),
     ):
-        result = runner.invoke(main, ["scrape", "likes"])
+        result = runner.invoke(main, ["scrape", source])
     assert result.exit_code != 0
     assert isinstance(result.exception, RuntimeError)
     assert "Not logged in" in str(result.exception)
