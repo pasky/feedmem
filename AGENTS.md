@@ -17,6 +17,7 @@ Twitter/X personal archive tool using Playwright for scraping (API is write-only
 
 ## Commands
 - Any change should be accompanied with tests update. (Always prefer updating existing unit tests over adding new ones.)
+- Any change should be tested by actually running the command.
 - Run linting, typecheck etc. via pre-commit.
 - You must commit your work once finished.
 - Never use `git add -A` to avoid accidentally adding untracked files.
