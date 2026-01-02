@@ -38,10 +38,21 @@ feedmem scrape likes
 feedmem search "python"
 ```
 
-### Option B: Headless server (SSH)
+### Option B: Import cookies (recommended for headless/bot-detection issues)
 
-1. On a machine with a browser, run `feedmem login`
-2. Copy the auth state file to your server:
+If `feedmem login` fails due to bot detection, export cookies from your real browser:
+
+1. Log in to x.com in Chrome/Firefox normally
+2. Install the [Cookie-Editor](https://cookie-editor.cgagnier.ca/) extension
+3. On x.com, click Cookie-Editor → Export → Export as JSON
+4. Save the file and import:
+   ```bash
+   feedmem login --cookies ~/Downloads/x.com_cookies.json
+   ```
+
+### Option C: Copy auth state to server
+
+If login works locally but you need to scrape on a headless server:
    ```bash
    # Find where auth state is stored
    feedmem login --show-path
@@ -51,7 +62,8 @@ feedmem search "python"
    ssh server 'mkdir -p ~/.local/share/feedmem'
    scp ~/.local/share/feedmem/auth_state.json server:~/.local/share/feedmem/
    ```
-3. Now you can scrape:
+
+Now you can scrape:
    ```bash
    feedmem scrape likes
    feedmem scrape bookmarks
@@ -62,6 +74,7 @@ feedmem search "python"
 ```bash
 # Authentication
 feedmem login                              # Interactive browser login
+feedmem login --cookies cookies.json       # Import cookies from Cookie-Editor
 feedmem login --show-path                  # Show auth state path (for scp)
 
 # Scraping (requires login first)

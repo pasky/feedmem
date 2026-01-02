@@ -56,10 +56,18 @@ def ingest(archive_path: Path, username: str) -> None:
 
 @main.command("login")
 @click.option("--show-path", is_flag=True, help="Show auth state path (for scp to servers)")
-def login_cmd(show_path: bool) -> None:
-    """Interactive browser login to Twitter/X."""
+@click.option(
+    "--cookies", "cookies_file", type=click.Path(exists=True, path_type=Path),
+    help="Import cookies from JSON file (Cookie-Editor extension format)"
+)
+def login_cmd(show_path: bool, cookies_file: Path | None) -> None:
+    """Interactive browser login to Twitter/X, or import cookies."""
     if show_path:
         click.echo(scraper.get_auth_state_path())
+        return
+    if cookies_file:
+        scraper.import_cookies_from_json(cookies_file)
+        click.echo(f"Cookies imported from {cookies_file}")
         return
     asyncio.run(scraper.login_interactive())
 

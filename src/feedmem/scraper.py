@@ -42,6 +42,41 @@ def get_auth_state_path() -> Path:
     return AUTH_STATE_PATH
 
 
+def import_cookies_from_json(cookies_file: Path) -> None:
+    """Import cookies from browser extension export (Cookie-Editor JSON format)."""
+    import json as json_module
+
+    cookies = json_module.loads(cookies_file.read_text())
+
+    # Convert Cookie-Editor format to Playwright format
+    playwright_cookies: list[dict[str, Any]] = []
+    for c in cookies:
+        cookie: dict[str, Any] = {
+            "name": c["name"],
+            "value": c["value"],
+            "domain": c.get("domain", ".x.com"),
+            "path": c.get("path", "/"),
+        }
+        if "expirationDate" in c:
+            cookie["expires"] = c["expirationDate"]
+        if c.get("secure"):
+            cookie["secure"] = True
+        if c.get("httpOnly"):
+            cookie["httpOnly"] = True
+        if c.get("sameSite"):
+            cookie["sameSite"] = c["sameSite"].capitalize()
+        playwright_cookies.append(cookie)
+
+    # Create Playwright storage state format
+    state: dict[str, Any] = {
+        "cookies": playwright_cookies,
+        "origins": [],
+    }
+
+    AUTH_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    AUTH_STATE_PATH.write_text(json_module.dumps(state, indent=2))
+
+
 def has_auth_state() -> bool:
     return AUTH_STATE_PATH.exists()
 
