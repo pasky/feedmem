@@ -1,6 +1,7 @@
 """Playwright-based scraper for Twitter/X."""
 
 import asyncio
+import html
 import json
 from datetime import datetime
 from pathlib import Path
@@ -130,7 +131,7 @@ def parse_tweet_from_graphql(entry: dict[str, Any]) -> TweetData | None:
             "author_id": user_results.get("rest_id", ""),
             "author_handle": user_core.get("screen_name") or user_legacy.get("screen_name", ""),
             "author_name": user_core.get("name") or user_legacy.get("name", ""),
-            "content": legacy.get("full_text", ""),
+            "content": html.unescape(legacy.get("full_text", "")),
             "created_at": parse_twitter_timestamp(legacy.get("created_at", "")),
             "reply_to_id": legacy.get("in_reply_to_status_id_str"),
             "metrics_likes": legacy.get("favorite_count"),

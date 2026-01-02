@@ -20,7 +20,7 @@ def test_parse_tweet_from_graphql_standard() -> None:
                         "__typename": "Tweet",
                         "rest_id": "12345",
                         "legacy": {
-                            "full_text": "Hello from GraphQL!",
+                            "full_text": "b&amp;b staff &lt;3",
                             "created_at": "Mon Jan 15 10:00:00 +0000 2024",
                             "favorite_count": 42,
                             "retweet_count": 7,
@@ -48,7 +48,7 @@ def test_parse_tweet_from_graphql_standard() -> None:
     assert tweet["id"] == "12345"
     assert tweet["author_handle"] == "testuser"
     assert tweet["author_name"] == "Test User"
-    assert tweet["content"] == "Hello from GraphQL!"
+    assert tweet["content"] == "b&b staff <3"
     assert tweet["metrics_likes"] == 42
     assert tweet["metrics_retweets"] == 7
 
