@@ -42,16 +42,16 @@ def test_ingest_command(tmp_path: Path) -> None:
     runner = CliRunner()
     with (
         runner.isolated_filesystem(temp_dir=tmp_path),
-        patch("feedmem.db.get_default_db_path", return_value=tmp_path / "test.db"),
+        patch("feedmem.db.get_default_db_path", return_value=Path(":memory:")),
     ):
         result = runner.invoke(main, ["ingest", str(archive_path), "--username", "testuser"])
     assert result.exit_code == 0
     assert "Ingested 1 tweets" in result.output
 
 
-def test_search_no_results(tmp_path: Path) -> None:
+def test_search_no_results() -> None:
     runner = CliRunner()
-    with patch("feedmem.db.get_default_db_path", return_value=tmp_path / "test.db"):
+    with patch("feedmem.db.get_default_db_path", return_value=Path(":memory:")):
         result = runner.invoke(main, ["search", "nonexistent"])
     assert result.exit_code == 0
     assert "No results found" in result.output
@@ -74,7 +74,19 @@ def test_search_with_results(tmp_path: Path) -> None:
 
     runner = CliRunner()
     db_path = tmp_path / "search_test.db"
-    with patch("feedmem.db.get_default_db_path", return_value=db_path):
+    with patch("feedmem.cli.db.init_db") as mock_init:
+        import aiosqlite
+
+        from feedmem.db import SCHEMA
+
+        async def fast_init(path: Path | None = None) -> aiosqlite.Connection:
+            conn = await aiosqlite.connect(path or db_path)
+            await conn.execute("PRAGMA synchronous = OFF")
+            await conn.executescript(SCHEMA)
+            await conn.commit()
+            return conn
+
+        mock_init.side_effect = fast_init
         runner.invoke(main, ["ingest", str(archive_path), "--username", "pyuser"])
         result = runner.invoke(main, ["search", "python"])
 
@@ -87,7 +99,7 @@ def test_scrape_requires_auth(tmp_path: Path) -> None:
     runner = CliRunner()
     with (
         patch("feedmem.scraper.AUTH_STATE_PATH", tmp_path / "nonexistent.json"),
-        patch("feedmem.db.get_default_db_path", return_value=tmp_path / "test.db"),
+        patch("feedmem.db.get_default_db_path", return_value=Path(":memory:")),
     ):
         result = runner.invoke(main, ["scrape", "likes"])
     assert result.exit_code != 0

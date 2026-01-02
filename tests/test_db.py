@@ -11,9 +11,8 @@ from feedmem.db import add_interaction, init_db, search_tweets, upsert_tweet
 
 
 @pytest_asyncio.fixture
-async def db(tmp_path: Path) -> AsyncGenerator[aiosqlite.Connection]:
-    db_path = tmp_path / "test.db"
-    conn = await init_db(db_path)
+async def db() -> AsyncGenerator[aiosqlite.Connection]:
+    conn = await init_db(Path(":memory:"))
     yield conn
     await conn.close()
 
