@@ -102,6 +102,18 @@ def has_auth_state() -> bool:
 TweetData = dict[str, Any]
 
 
+class ScrapeResult:
+    """Result of a scrape operation."""
+
+    def __init__(self, tweets: list[TweetData], stop_reason: str) -> None:
+        self.tweets = tweets
+        self.stop_reason = stop_reason
+
+    @property
+    def hit_limit(self) -> bool:
+        return self.stop_reason.startswith("reached limit")
+
+
 def parse_tweet_from_graphql(entry: dict[str, Any]) -> TweetData | None:
     """Extract tweet data from Twitter's GraphQL response format."""
     try:
@@ -282,7 +294,7 @@ async def scrape_likes(
     scroll_delay_ms: int = 500,
     known_ids: set[str] | None = None,
     verbose: bool = False,
-) -> list[TweetData]:
+) -> ScrapeResult:
     """Scrape liked tweets from Twitter/X."""
     return await _scrape_timeline(
         endpoint_pattern="**/Likes?*",
@@ -302,7 +314,7 @@ async def scrape_bookmarks(
     scroll_delay_ms: int = 500,
     known_ids: set[str] | None = None,
     verbose: bool = False,
-) -> list[TweetData]:
+) -> ScrapeResult:
     """Scrape bookmarked tweets from Twitter/X."""
     return await _scrape_timeline(
         endpoint_pattern="**/Bookmarks?*",
@@ -323,7 +335,7 @@ async def scrape_notifications(
     scroll_delay_ms: int = 500,
     known_ids: set[str] | None = None,
     verbose: bool = False,
-) -> list[TweetData]:
+) -> ScrapeResult:
     """Scrape notifications (mentions/replies to you) from Twitter/X."""
     return await _scrape_timeline(
         endpoint_pattern="**/NotificationsTimeline?*",
@@ -344,7 +356,7 @@ async def scrape_profile(
     scroll_delay_ms: int = 500,
     known_ids: set[str] | None = None,
     verbose: bool = False,
-) -> list[TweetData]:
+) -> ScrapeResult:
     """Scrape your own posts and replies from Twitter/X."""
     return await _scrape_timeline(
         endpoint_pattern="**/UserTweetsAndReplies?*",
@@ -368,7 +380,7 @@ async def _scrape_timeline(
     known_ids: set[str] | None = None,
     verbose: bool = False,
     extractor: str = "user_timeline",
-) -> list[TweetData]:
+) -> ScrapeResult:
     """Generic timeline scraper using GraphQL interception."""
     if not has_auth_state():
         raise RuntimeError("Not logged in. Run 'feedmem login' first.")
@@ -426,9 +438,8 @@ async def _scrape_timeline(
 
         await browser.close()
 
-    if max_items > 0:
-        return collector.tweets[:max_items]
-    return collector.tweets
+    tweets = collector.tweets[:max_items] if max_items > 0 else collector.tweets
+    return ScrapeResult(tweets, stop_reason)
 
 
 async def _get_username(page: Page) -> str:

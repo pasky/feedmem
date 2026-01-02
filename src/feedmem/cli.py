@@ -92,8 +92,8 @@ async def _scrape_source(
     headless: bool,
     full: bool,
     verbose: bool,
-) -> int:
-    """Scrape a single source and save to db. Returns count of new items."""
+) -> scraper.ScrapeResult:
+    """Scrape a single source and save to db. Returns scrape result."""
     interaction_type = INTERACTION_TYPES[source]
     known_ids = None if full else await db.get_tweet_ids(conn, interaction_type)
 
@@ -104,14 +104,14 @@ async def _scrape_source(
         "profile": scraper.scrape_profile,
     }[source]
 
-    tweets = await scrape_fn(
+    result = await scrape_fn(
         max_items=max_items,
         headless=headless,
         known_ids=known_ids,
         verbose=verbose,
     )
 
-    for tweet in reversed(tweets):
+    for tweet in reversed(result.tweets):
         await db.upsert_tweet(
             conn,
             id=tweet["id"],
@@ -141,7 +141,7 @@ async def _scrape_source(
                     url=media["url"],
                     mime_type=media.get("type"),
                 )
-    return len(tweets)
+    return result
 
 
 @main.command()
@@ -158,8 +158,13 @@ def scrape(source: str, max_items: int, no_headless: bool, full: bool, verbose: 
         conn = await db.init_db()
         try:
             for src in sources:
-                count = await _scrape_source(conn, src, max_items, not no_headless, full, verbose)
-                click.echo(f"Saved {count} new {src}")
+                result = await _scrape_source(conn, src, max_items, not no_headless, full, verbose)
+                click.echo(f"Saved {len(result.tweets)} new {src}")
+                if result.hit_limit:
+                    click.echo(
+                        f"WARNING: stopped at --limit={max_items}, there may be more new {src}",
+                        err=True,
+                    )
         finally:
             await conn.close()
 
