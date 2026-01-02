@@ -116,8 +116,6 @@ feedmem uses Playwright to run a headless browser with your logged-in session, i
 
 ## Roadmap
 
-- [ ] `feedmem scrape notifications` — mentions, replies to you
-- [ ] `feedmem scrape profile` — your posts and replies
 - [ ] Semantic search with embeddings
 - [ ] Image OCR for meme search
 - [ ] Chrome extension for live capture (particularly of what you see)
