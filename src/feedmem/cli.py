@@ -88,10 +88,7 @@ INTERACTION_TYPES = {
 @click.option("--no-headless", is_flag=True, help="Show browser window")
 @click.option("--full", is_flag=True, help="Full scrape (ignore known items)")
 @click.option("-v", "--verbose", is_flag=True, help="Show progress during scrape")
-@click.option("--with-replies", is_flag=True, help="Include replies (profile only)")
-def scrape(
-    source: str, max_items: int, no_headless: bool, full: bool, verbose: bool, with_replies: bool
-) -> None:
+def scrape(source: str, max_items: int, no_headless: bool, full: bool, verbose: bool) -> None:
     """Scrape likes, bookmarks, notifications, or profile from Twitter/X."""
 
     async def run() -> None:
@@ -126,7 +123,6 @@ def scrape(
                     headless=not no_headless,
                     known_ids=known_ids,
                     verbose=verbose,
-                    include_replies=with_replies,
                 )
 
             for tweet in reversed(tweets):

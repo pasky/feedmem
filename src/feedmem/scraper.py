@@ -308,7 +308,7 @@ async def scrape_notifications(
 ) -> list[TweetData]:
     """Scrape notifications (mentions/replies to you) from Twitter/X."""
     return await _scrape_timeline(
-        endpoint_pattern="**/Notifications?*",
+        endpoint_pattern="**/NotificationsTimeline?*",
         url_path="/notifications/mentions",
         interaction_type="mention",
         max_items=max_items,
@@ -326,18 +326,11 @@ async def scrape_profile(
     scroll_delay_ms: int = 500,
     known_ids: set[str] | None = None,
     verbose: bool = False,
-    include_replies: bool = False,
 ) -> list[TweetData]:
-    """Scrape your own posts (and optionally replies) from Twitter/X."""
-    if include_replies:
-        endpoint_pattern = "**/UserTweetsAndReplies?*"
-        url_suffix = "/with_replies"
-    else:
-        endpoint_pattern = "**/UserTweets?*"
-        url_suffix = ""
+    """Scrape your own posts and replies from Twitter/X."""
     return await _scrape_timeline(
-        endpoint_pattern=endpoint_pattern,
-        url_path=f"/PROFILE{url_suffix}",
+        endpoint_pattern="**/UserTweetsAndReplies?*",
+        url_path="/PROFILE/with_replies",
         interaction_type="own",
         max_items=max_items,
         headless=headless,
