@@ -4,7 +4,11 @@ version = "0.1.0"
 description = "Long-term memory for your social feeds - archive, search, and recall tweets, likes, bookmarks"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "aiosqlite>=0.20.0",
+    "click>=8.1.0",
+    "playwright>=1.40.0",
+]
 
 [project.scripts]
 feedmem = "feedmem.cli:main"
@@ -26,3 +30,12 @@ typeCheckingMode = "strict"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.407",
+    "pytest>=9.0.2",
+    "pytest-asyncio>=1.3.0",
+    "pytest-cov>=7.0.0",
+    "ruff>=0.14.10",
+]
