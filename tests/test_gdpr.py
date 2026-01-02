@@ -29,6 +29,12 @@ def test_parse_js_file_invalid_format() -> None:
         parse_js_file("not valid js format")
 
 
+def test_parse_js_file_allows_trailing_semicolon() -> None:
+    content = 'window.YTD.tweets.part0 = [{"tweet": {"id": "789"}}];\n'
+    result = parse_js_file(content)
+    assert result[0]["tweet"]["id"] == "789"
+
+
 def test_parse_archive_extracts_tweets(tmp_path: Path) -> None:
     archive_path = tmp_path / "twitter-archive.zip"
     tweets_data = [

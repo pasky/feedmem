@@ -7,7 +7,14 @@ import aiosqlite
 import pytest
 import pytest_asyncio
 
-from feedmem.db import add_interaction, init_db, search_tweets, upsert_tweet
+from feedmem.db import (
+    add_interaction,
+    add_media,
+    init_db,
+    list_tweets,
+    search_tweets,
+    upsert_tweet,
+)
 
 
 @pytest_asyncio.fixture
@@ -89,3 +96,66 @@ async def test_upsert_updates_existing(db: aiosqlite.Connection) -> None:
     results = await search_tweets(db, "updated")
     assert len(results) == 1
     assert "updated" in results[0]["content"]
+
+
+@pytest.mark.asyncio
+async def test_search_deduplicates_interactions(db: aiosqlite.Connection) -> None:
+    await upsert_tweet(
+        db,
+        id="abc",
+        author_id="u1",
+        author_handle="combo",
+        content="hello world with python",
+        created_at="2024-01-01T00:00:00Z",
+    )
+    await add_interaction(db, type="like", tweet_id="abc", timestamp="2024-01-01T01:00:00Z")
+    await add_interaction(
+        db,
+        type="bookmark",
+        tweet_id="abc",
+        timestamp="2024-01-01T02:00:00Z",
+    )
+
+    results = await search_tweets(db, "python")
+    assert len(results) == 1
+    assert results[0]["id"] == "abc"
+    assert results[0]["interaction_type"] == "bookmark"
+
+
+@pytest.mark.asyncio
+async def test_list_collapses_interaction_and_media(db: aiosqlite.Connection) -> None:
+    await upsert_tweet(
+        db,
+        id="xyz",
+        author_id="u1",
+        author_handle="mediauser",
+        content="photo tweet",
+        created_at="2024-01-01T00:00:00Z",
+    )
+    await add_media(
+        db,
+        id="m1",
+        tweet_id="xyz",
+        url="https://example.com/1.jpg",
+        mime_type="image/jpeg",
+    )
+    await add_media(
+        db,
+        id="m2",
+        tweet_id="xyz",
+        url="https://example.com/2.jpg",
+        mime_type="image/jpeg",
+    )
+    await add_interaction(db, type="like", tweet_id="xyz", timestamp="2024-01-01T01:00:00Z")
+    await add_interaction(
+        db,
+        type="bookmark",
+        tweet_id="xyz",
+        timestamp="2024-01-01T02:00:00Z",
+    )
+
+    results = await list_tweets(db)
+    assert len(results) == 1
+    urls = (results[0]["media_urls"] or "").split(",")
+    assert set(urls) == {"https://example.com/1.jpg", "https://example.com/2.jpg"}
+    assert results[0]["interaction_type"] == "bookmark"

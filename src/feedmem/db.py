@@ -190,20 +190,33 @@ async def list_tweets(
     limit: int = 50,
 ) -> list[SearchResult]:
     sql = """
-        SELECT t.id, t.author_id, t.author_handle, t.author_name, t.content, t.created_at,
-               t.reply_to_id, t.metrics_likes, t.metrics_retweets, t.metrics_replies,
-               i.type as interaction_type, i.timestamp as interaction_timestamp,
-               GROUP_CONCAT(m.url, ' ') as media_urls
-        FROM tweet t
-        LEFT JOIN interaction i ON i.tweet_id = t.id
-        LEFT JOIN media m ON m.tweet_id = t.id
-        WHERE 1=1
+        WITH latest_interaction AS (
+            SELECT tweet_id, MAX(id) AS interaction_id
+            FROM interaction
     """
     params: list[str | int] = []
     if interaction_type:
-        sql += " AND i.type = ?"
+        sql += " WHERE type = ?"
         params.append(interaction_type)
-    sql += " GROUP BY t.id ORDER BY i.id DESC LIMIT ?"
+    sql += """
+            GROUP BY tweet_id
+        )
+        SELECT t.id, t.author_id, t.author_handle, t.author_name, t.content, t.created_at,
+               t.reply_to_id, t.metrics_likes, t.metrics_retweets, t.metrics_replies,
+               i.type as interaction_type, i.timestamp as interaction_timestamp,
+               GROUP_CONCAT(DISTINCT m.url) as media_urls
+        FROM tweet t
+        LEFT JOIN latest_interaction li ON li.tweet_id = t.id
+        LEFT JOIN interaction i ON i.id = li.interaction_id
+        LEFT JOIN media m ON m.tweet_id = t.id
+    """
+    if interaction_type:
+        sql += " WHERE i.type IS NOT NULL"
+    sql += """
+        GROUP BY t.id
+        ORDER BY COALESCE(i.id, t.rowid) DESC
+        LIMIT ?
+    """
     params.append(limit)
 
     async with db.execute(sql, params) as cursor:
@@ -239,17 +252,28 @@ async def search_tweets(
     limit: int = 50,
 ) -> list[SearchResult]:
     sql = """
+        WITH latest_interaction AS (
+            SELECT tweet_id, MAX(id) AS interaction_id
+            FROM interaction
+    """
+    params: list[str | int] = []
+    if interaction_type:
+        sql += " WHERE type = ?"
+        params.append(interaction_type)
+    sql += """
+            GROUP BY tweet_id
+        )
         SELECT t.id, t.author_handle, t.author_name, t.content, t.created_at,
                i.type as interaction_type, i.timestamp as interaction_timestamp
         FROM tweet_fts f
         JOIN tweet t ON t.rowid = f.rowid
-        LEFT JOIN interaction i ON i.tweet_id = t.id
+        LEFT JOIN latest_interaction li ON li.tweet_id = t.id
+        LEFT JOIN interaction i ON i.id = li.interaction_id
         WHERE tweet_fts MATCH ?
     """
-    params: list[str | int] = [query]
+    params.append(query)
     if interaction_type:
-        sql += " AND i.type = ?"
-        params.append(interaction_type)
+        sql += " AND i.type IS NOT NULL"
     sql += " ORDER BY rank LIMIT ?"
     params.append(limit)
 

@@ -13,7 +13,7 @@ TweetData = dict[str, Any]
 
 def parse_js_file(content: str) -> Any:
     """Parse Twitter's JS-wrapped JSON files (e.g., 'window.YTD.tweets.part0 = [....')."""
-    match = re.search(r"=\s*(\[.*\])\s*$", content, re.DOTALL)
+    match = re.search(r"=\s*(\[[\s\S]*\])\s*;?\s*$", content, re.DOTALL)
     if match:
         return json.loads(match.group(1))
     raise ValueError("Could not parse JS file format")
