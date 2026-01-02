@@ -84,7 +84,7 @@ INTERACTION_TYPES = {
 
 @main.command()
 @click.argument("source", type=click.Choice(["likes", "bookmarks", "notifications", "profile"]))
-@click.option("--limit", "max_items", default=0, help="Max items to fetch (0=unlimited)")
+@click.option("--limit", "max_items", default=100, help="Max items to fetch (0=unlimited)")
 @click.option("--no-headless", is_flag=True, help="Show browser window")
 @click.option("--full", is_flag=True, help="Full scrape (ignore known items)")
 @click.option("-v", "--verbose", is_flag=True, help="Show progress during scrape")
