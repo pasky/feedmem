@@ -20,7 +20,7 @@ cd feedmem
 uv sync
 
 # Install Playwright browser (one-time)
-uv run playwright install chromium
+uv run playwright install firefox
 ```
 
 ## Quick Start

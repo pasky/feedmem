@@ -17,28 +17,18 @@ async def login_interactive() -> None:
     AUTH_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(
-            headless=False,
-            args=[
-                "--disable-blink-features=AutomationControlled",
-            ],
-        )
-        context = await browser.new_context(
-            viewport={"width": 1280, "height": 800},
-            user_agent=(
-                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-                "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            ),
-        )
-        page = await context.new_page()
+        # Firefox tends to work better with Twitter's bot detection
+        browser = await p.firefox.launch(headless=False)
 
-        # Hide webdriver property
-        await page.add_init_script("""
-            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-        """)
+        # Use a real device profile for consistent fingerprint
+        devices: dict[str, Any] = p.devices  # type: ignore[assignment]
+        device: dict[str, Any] = devices["Desktop Firefox"]
+        context = await browser.new_context(**device)
+        page = await context.new_page()
 
         await page.goto(f"{TWITTER_URL}/login")
         print("Please log in to Twitter/X in the browser window.")
+        print("Take your time - type slowly, don't paste.")
         print("Press Enter here when you're logged in and see your home feed...")
         await asyncio.get_event_loop().run_in_executor(None, input)
 
