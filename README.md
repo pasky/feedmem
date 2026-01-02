@@ -77,10 +77,10 @@ feedmem login                              # Interactive browser login
 feedmem login --cookies cookies.json       # Import cookies from Cookie-Editor
 feedmem login --show-path                  # Show auth state path (for scp)
 
-# Scraping (requires login first)
-feedmem scrape likes                       # Scrape all your likes
-feedmem scrape bookmarks                   # Scrape all bookmarks
-feedmem scrape likes --limit 100           # Limit to 100 items
+# Scraping (requires login first, default limit 100)
+feedmem scrape likes                       # Scrape your likes (up to 100)
+feedmem scrape bookmarks                   # Scrape bookmarks (up to 100)
+feedmem scrape likes --limit 0             # Unlimited (scrape all)
 feedmem scrape likes --no-headless         # Show browser (for debugging)
 
 # Import GDPR archive (your own tweets)
