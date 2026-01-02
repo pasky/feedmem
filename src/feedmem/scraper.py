@@ -17,9 +17,25 @@ async def login_interactive() -> None:
     AUTH_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=False)
-        context = await browser.new_context()
+        browser = await p.chromium.launch(
+            headless=False,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+            ],
+        )
+        context = await browser.new_context(
+            viewport={"width": 1280, "height": 800},
+            user_agent=(
+                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            ),
+        )
         page = await context.new_page()
+
+        # Hide webdriver property
+        await page.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+        """)
 
         await page.goto(f"{TWITTER_URL}/login")
         print("Please log in to Twitter/X in the browser window.")
