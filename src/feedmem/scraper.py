@@ -265,7 +265,10 @@ class TweetCollector:
                         continue
                     self._consecutive_known = 0
                     tweet["interaction_type"] = self.interaction_type
-                    tweet["interaction_timestamp"] = datetime.now().isoformat()
+                    if self.interaction_type in ("like", "bookmark"):
+                        tweet["interaction_timestamp"] = datetime.now().isoformat()
+                    else:
+                        tweet["interaction_timestamp"] = tweet["created_at"]
                     self.tweets.append(tweet)
                     if self._verbose:
                         handle = tweet["author_handle"]

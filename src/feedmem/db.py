@@ -214,7 +214,7 @@ async def list_tweets(
         sql += " WHERE i.type IS NOT NULL"
     sql += """
         GROUP BY t.id
-        ORDER BY COALESCE(i.id, t.rowid) DESC
+        ORDER BY COALESCE(i.timestamp, t.created_at) DESC
         LIMIT ?
     """
     params.append(limit)
