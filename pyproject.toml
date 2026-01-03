@@ -11,6 +11,9 @@ dependencies = [
     "playwright>=1.40.0",
 ]
 
+[project.optional-dependencies]
+llm = ["llm>=0.17"]
+
 [project.scripts]
 feedmem = "feedmem.cli:main"
 

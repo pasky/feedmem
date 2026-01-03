@@ -350,6 +350,11 @@ def _format_tweet(
         lines.append(f"{indent}  ↩ Reply to: https://x.com/i/status/{r['reply_to_id']}")
     if r.get("media_urls"):
         lines.append(f"{indent}  Media: {r['media_urls']}")
+        if r.get("media_descriptions"):
+            desc = r["media_descriptions"]
+            if not verbose and len(desc) > 120:
+                desc = desc[:117] + "..."
+            lines.append(f'{indent}    "{desc}"')
     return "\n".join(lines)
 
 

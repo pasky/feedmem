@@ -9,8 +9,9 @@ Archive your Twitter/X activity (likes, bookmarks, tweets, replies, notification
 - **Scrape likes & bookmarks** via headless browser (no API needed)
 - **Recursive scraping** of referenced tweets (reply parents, quotes, RTs)
 - **Media download** for images and videos
+- **LLM-powered media descriptions** for images/video (optional, via [llm](https://github.com/simonw/llm))
 - **Import GDPR data exports** for your own tweets
-- **Full-text search** with SQLite FTS5
+- **Full-text search** with SQLite FTS5 (includes media descriptions)
 - **Works on headless servers** via auth state import
 
 ## Installation
@@ -23,6 +24,10 @@ uv sync
 
 # Install Playwright browser (one-time)
 uv run playwright install firefox
+
+# Optional: enable LLM-powered media descriptions
+uv sync --extra llm
+llm keys set openai  # or configure another provider
 ```
 
 ## Quick Start
@@ -87,6 +92,7 @@ feedmem scrape likes --no-headless         # Show browser (for debugging)
 feedmem scrape likes --recursion 2         # Fetch referenced tweets 2 levels deep
 feedmem scrape likes --recursion 0         # Don't fetch referenced tweets (default: 1)
 feedmem scrape likes --no-download-media   # Skip downloading images/videos (default: download)
+feedmem scrape likes --no-media-llm        # Skip LLM descriptions (default: on if llm installed)
 
 # Import GDPR archive (your own tweets)
 feedmem ingest archive.zip --username yourhandle
@@ -123,7 +129,6 @@ feedmem uses Playwright to run a headless browser with your logged-in session, i
 ## Roadmap
 
 - [ ] Semantic search with embeddings
-- [ ] Image OCR for meme search
 - [ ] Chrome extension for live capture (particularly of what you see)
 
 ## License

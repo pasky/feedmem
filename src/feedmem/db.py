@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS media (
     url TEXT NOT NULL,
     local_path TEXT,
     mime_type TEXT,
-    extracted_text TEXT,  -- OCR results (future)
+    description TEXT,  -- LLM-generated description
     embedding BLOB  -- vector for semantic search (future)
 );
 
@@ -125,6 +125,9 @@ async def _migrate(db: aiosqlite.Connection) -> None:
         )
         await db.execute("ALTER TABLE media DROP COLUMN tweet_id")
 
+    if "extracted_text" in media_columns:
+        await db.execute("ALTER TABLE media RENAME COLUMN extracted_text TO description")
+
 
 async def upsert_tweet(
     db: aiosqlite.Connection,
@@ -204,15 +207,17 @@ async def add_media(
     url: str,
     local_path: str | None = None,
     mime_type: str | None = None,
+    description: str | None = None,
 ) -> None:
     await db.execute(
         """
-        INSERT INTO media (id, url, local_path, mime_type)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO media (id, url, local_path, mime_type, description)
+        VALUES (?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
-            local_path = COALESCE(excluded.local_path, media.local_path)
+            local_path = COALESCE(excluded.local_path, media.local_path),
+            description = COALESCE(excluded.description, media.description)
         """,
-        (id, url, local_path, mime_type),
+        (id, url, local_path, mime_type, description),
     )
     await db.execute(
         """
@@ -234,7 +239,8 @@ async def get_tweet(db: aiosqlite.Connection, tweet_id: str) -> SearchResult | N
         SELECT t.id, t.author_id, t.author_handle, t.author_name, t.content, t.created_at,
                t.reply_to_id, t.quoted_id, t.retweeted_id,
                t.metrics_likes, t.metrics_retweets, t.metrics_replies,
-               GROUP_CONCAT(DISTINCT COALESCE(m.local_path, m.url)) as media_urls
+               GROUP_CONCAT(DISTINCT COALESCE(m.local_path, m.url)) as media_urls,
+               GROUP_CONCAT(DISTINCT m.description) as media_descriptions
         FROM tweet t
         LEFT JOIN tweet_media tm ON tm.tweet_id = t.id
         LEFT JOIN media m ON m.id = tm.media_id
@@ -271,7 +277,8 @@ async def list_tweets(
                t.reply_to_id, t.quoted_id, t.retweeted_id,
                t.metrics_likes, t.metrics_retweets, t.metrics_replies,
                i.type as interaction_type, i.timestamp as interaction_timestamp,
-               GROUP_CONCAT(DISTINCT COALESCE(m.local_path, m.url)) as media_urls
+               GROUP_CONCAT(DISTINCT COALESCE(m.local_path, m.url)) as media_urls,
+               GROUP_CONCAT(DISTINCT m.description) as media_descriptions
         FROM tweet t
         LEFT JOIN latest_interaction li ON li.tweet_id = t.id
         LEFT JOIN interaction i ON i.id = li.interaction_id
@@ -330,19 +337,29 @@ async def search_tweets(
         params.append(interaction_type)
     sql += """
             GROUP BY tweet_id
+        ),
+        matching_tweets AS (
+            SELECT t.id, t.author_handle, t.author_name, t.content, t.created_at
+            FROM tweet_fts f
+            JOIN tweet t ON t.rowid = f.rowid
+            WHERE tweet_fts MATCH ?
+            UNION
+            SELECT DISTINCT t.id, t.author_handle, t.author_name, t.content, t.created_at
+            FROM tweet t
+            JOIN tweet_media tm ON tm.tweet_id = t.id
+            JOIN media m ON m.id = tm.media_id
+            WHERE m.description LIKE '%' || ? || '%'
         )
-        SELECT t.id, t.author_handle, t.author_name, t.content, t.created_at,
+        SELECT mt.id, mt.author_handle, mt.author_name, mt.content, mt.created_at,
                i.type as interaction_type, i.timestamp as interaction_timestamp
-        FROM tweet_fts f
-        JOIN tweet t ON t.rowid = f.rowid
-        LEFT JOIN latest_interaction li ON li.tweet_id = t.id
+        FROM matching_tweets mt
+        LEFT JOIN latest_interaction li ON li.tweet_id = mt.id
         LEFT JOIN interaction i ON i.id = li.interaction_id
-        WHERE tweet_fts MATCH ?
     """
-    params.append(query)
+    params.extend([query, query])
     if interaction_type:
-        sql += " AND i.type IS NOT NULL"
-    sql += " ORDER BY rank LIMIT ?"
+        sql += " WHERE i.type IS NOT NULL"
+    sql += " ORDER BY mt.created_at DESC LIMIT ?"
     params.append(limit)
 
     async with db.execute(sql, params) as cursor:
