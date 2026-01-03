@@ -239,7 +239,9 @@ async def _scrape_source(
     show_default=True,
     help="Depth for fetching referenced tweets (reply parents, quotes, RTs)",
 )
-@click.option("--download-media", is_flag=True, help="Download media files locally")
+@click.option(
+    "--download-media/--no-download-media", default=True, help="Download media files locally"
+)
 def scrape(
     source: str,
     max_items: int,

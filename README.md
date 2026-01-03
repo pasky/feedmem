@@ -86,7 +86,7 @@ feedmem scrape likes --limit 0             # Unlimited (scrape all)
 feedmem scrape likes --no-headless         # Show browser (for debugging)
 feedmem scrape likes --recursion 2         # Fetch referenced tweets 2 levels deep
 feedmem scrape likes --recursion 0         # Don't fetch referenced tweets (default: 1)
-feedmem scrape likes --download-media      # Download images/videos locally
+feedmem scrape likes --no-download-media   # Skip downloading images/videos (default: download)
 
 # Import GDPR archive (your own tweets)
 feedmem ingest archive.zip --username yourhandle
