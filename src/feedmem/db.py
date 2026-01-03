@@ -222,7 +222,7 @@ async def list_tweets(
         SELECT t.id, t.author_id, t.author_handle, t.author_name, t.content, t.created_at,
                t.reply_to_id, t.metrics_likes, t.metrics_retweets, t.metrics_replies,
                i.type as interaction_type, i.timestamp as interaction_timestamp,
-               GROUP_CONCAT(DISTINCT m.url) as media_urls
+               GROUP_CONCAT(DISTINCT COALESCE(m.local_path, m.url)) as media_urls
         FROM tweet t
         LEFT JOIN latest_interaction li ON li.tweet_id = t.id
         LEFT JOIN interaction i ON i.id = li.interaction_id
