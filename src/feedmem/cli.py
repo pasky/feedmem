@@ -127,7 +127,7 @@ async def _save_tweet(
         local_path = None
         if download_media and url:
             click.echo(f"    Downloading media {media['id']}...")
-            path = await scraper.download_media(url, tweet["id"], media["id"])
+            path = await scraper.download_media(url, media["id"])
             local_path = str(path) if path else None
         await db.add_media(
             conn,

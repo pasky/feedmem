@@ -501,7 +501,6 @@ def get_media_dir() -> Path:
 
 async def download_media(
     url: str,
-    tweet_id: str,
     media_id: str,
 ) -> Path | None:
     """Download media file and return local path. Returns None on failure."""
@@ -510,7 +509,7 @@ async def download_media(
     parsed = urlparse(url)
     ext = Path(parsed.path).suffix or ".jpg"
     ext = re.sub(r"\?.*", "", ext)
-    local_path = MEDIA_DIR / f"{tweet_id}_{media_id}{ext}"
+    local_path = MEDIA_DIR / f"{media_id}{ext}"
 
     if local_path.exists():
         return local_path
