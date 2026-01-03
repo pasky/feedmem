@@ -96,13 +96,14 @@ async def _save_tweet(
     verbose: bool = False,
 ) -> None:
     """Save a single tweet to db, optionally downloading media."""
+    unfurled = await scraper.unfurl_content(tweet["content"])
     await db.upsert_tweet(
         conn,
         id=tweet["id"],
         author_id=tweet["author_id"],
         author_handle=tweet["author_handle"],
         author_name=tweet["author_name"],
-        content=tweet["content"],
+        content=unfurled,
         created_at=tweet["created_at"],
         reply_to_id=tweet.get("reply_to_id"),
         quoted_id=tweet.get("quoted_id"),

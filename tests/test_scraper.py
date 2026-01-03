@@ -691,3 +691,13 @@ def test_get_media_dir() -> None:
     path = get_media_dir()
     assert path.name == "media"
     assert "feedmem" in str(path)
+
+
+def test_tco_pattern() -> None:
+    from feedmem.scraper import TCO_PATTERN
+
+    content = "Check this: https://t.co/YV7xdggieN and https://t.co/abc123"
+    urls = TCO_PATTERN.findall(content)
+    assert urls == ["https://t.co/YV7xdggieN", "https://t.co/abc123"]
+
+    assert TCO_PATTERN.findall("no links here") == []

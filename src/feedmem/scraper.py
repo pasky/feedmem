@@ -607,3 +607,34 @@ def get_referenced_ids(tweet: TweetData) -> list[str]:
     if tweet.get("retweeted_id"):
         refs.append(tweet["retweeted_id"])
     return refs
+
+
+TCO_PATTERN = re.compile(r"https://t\.co/\w+")
+
+
+async def unfurl_url(url: str, timeout: float = 10.0) -> str | None:
+    """Resolve a shortened URL to its final destination. Returns None on failure."""
+    try:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+            resp = await client.head(url)
+            return str(resp.url)
+    except httpx.HTTPError:
+        return None
+
+
+async def unfurl_content(content: str) -> str:
+    """Replace all t.co URLs in content with their resolved destinations."""
+    urls = TCO_PATTERN.findall(content)
+    if not urls:
+        return content
+
+    resolved: dict[str, str] = {}
+    for url in set(urls):
+        final = await unfurl_url(url)
+        if final and final != url:
+            resolved[url] = final
+
+    result = content
+    for short, full in resolved.items():
+        result = result.replace(short, full)
+    return result
