@@ -1,6 +1,8 @@
 """CLI entry point for feedmem."""
 
 import asyncio
+import random
+from datetime import datetime
 from pathlib import Path
 
 import click
@@ -242,6 +244,13 @@ async def _scrape_source(
 @click.option(
     "--download-media/--no-download-media", default=True, help="Download media files locally"
 )
+@click.option("--continuous", is_flag=True, help="Run continuously, refreshing at interval")
+@click.option(
+    "--interval",
+    default=6 * 3600,
+    show_default=True,
+    help="Seconds between refreshes in continuous mode (10%% random jitter applied)",
+)
 def scrape(
     source: str,
     max_items: int,
@@ -250,33 +259,48 @@ def scrape(
     verbose: bool,
     recursion_depth: int,
     download_media: bool,
+    continuous: bool,
+    interval: int,
 ) -> None:
     """Scrape likes, bookmarks, notifications, profile, or all from Twitter/X."""
     sources = SCRAPE_SOURCES if source == "all" else [source]
 
+    async def run_once(conn: db.aiosqlite.Connection) -> None:
+        for src in sources:
+            result, ref_count = await _scrape_source(
+                conn,
+                src,
+                max_items,
+                not no_headless,
+                full,
+                verbose,
+                recursion_depth=recursion_depth,
+                download_media=download_media,
+            )
+            msg = f"Saved {len(result.tweets)} new {src}"
+            if ref_count:
+                msg += f" (+{ref_count} referenced)"
+            click.echo(msg)
+            if result.hit_limit:
+                click.echo(
+                    f"WARNING: stopped at --limit={max_items}, there may be more new {src}",
+                    err=True,
+                )
+
     async def run() -> None:
         conn = await db.init_db()
         try:
-            for src in sources:
-                result, ref_count = await _scrape_source(
-                    conn,
-                    src,
-                    max_items,
-                    not no_headless,
-                    full,
-                    verbose,
-                    recursion_depth=recursion_depth,
-                    download_media=download_media,
+            await run_once(conn)
+            while continuous:
+                jitter = random.uniform(-0.1, 0.1) * interval
+                sleep_time = interval + jitter
+                next_run = datetime.now().timestamp() + sleep_time
+                click.echo(
+                    f"Sleeping {sleep_time / 3600:.1f}h until "
+                    f"{datetime.fromtimestamp(next_run).strftime('%Y-%m-%d %H:%M:%S')}"
                 )
-                msg = f"Saved {len(result.tweets)} new {src}"
-                if ref_count:
-                    msg += f" (+{ref_count} referenced)"
-                click.echo(msg)
-                if result.hit_limit:
-                    click.echo(
-                        f"WARNING: stopped at --limit={max_items}, there may be more new {src}",
-                        err=True,
-                    )
+                await asyncio.sleep(sleep_time)
+                await run_once(conn)
         finally:
             await conn.close()
 
