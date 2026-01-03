@@ -125,8 +125,7 @@ async def _save_tweet(
         url = media.get("video_url") or media.get("url")
         local_path = None
         if download_media and url:
-            if verbose:
-                click.echo(f"  Downloading media {media['id']}...")
+            click.echo(f"    Downloading media {media['id']}...")
             path = await scraper.download_media(url, tweet["id"], media["id"])
             local_path = str(path) if path else None
         await db.add_media(
@@ -190,6 +189,7 @@ async def _scrape_source(
     download_media: bool = False,
 ) -> tuple[scraper.ScrapeResult, int]:
     """Scrape a single source and save to db. Returns (scrape result, ref count)."""
+    click.echo(f"Scraping {source}...")
     interaction_type = INTERACTION_TYPES[source]
     known_ids = None if full else await db.get_tweet_ids(conn, interaction_type)
 
@@ -208,7 +208,10 @@ async def _scrape_source(
     )
 
     all_refs: list[str] = []
-    for tweet in reversed(result.tweets):
+    for i, tweet in enumerate(reversed(result.tweets), 1):
+        click.echo(
+            f"  [{i}/{len(result.tweets)}] @{tweet['author_handle']}: {tweet['content'][:50]}..."
+        )
         await _save_tweet(
             conn,
             tweet,
