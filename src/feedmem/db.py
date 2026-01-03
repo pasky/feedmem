@@ -201,6 +201,26 @@ async def add_media(
 SearchResult = dict[str, Any]
 
 
+async def get_tweet(db: aiosqlite.Connection, tweet_id: str) -> SearchResult | None:
+    """Get a single tweet by ID."""
+    sql = """
+        SELECT t.id, t.author_id, t.author_handle, t.author_name, t.content, t.created_at,
+               t.reply_to_id, t.quoted_id, t.retweeted_id,
+               t.metrics_likes, t.metrics_retweets, t.metrics_replies,
+               GROUP_CONCAT(DISTINCT COALESCE(m.local_path, m.url)) as media_urls
+        FROM tweet t
+        LEFT JOIN media m ON m.tweet_id = t.id
+        WHERE t.id = ?
+        GROUP BY t.id
+    """
+    async with db.execute(sql, (tweet_id,)) as cursor:
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        columns = [d[0] for d in cursor.description] if cursor.description else []
+        return dict(zip(columns, row, strict=False))
+
+
 async def list_tweets(
     db: aiosqlite.Connection,
     *,
@@ -220,7 +240,8 @@ async def list_tweets(
             GROUP BY tweet_id
         )
         SELECT t.id, t.author_id, t.author_handle, t.author_name, t.content, t.created_at,
-               t.reply_to_id, t.metrics_likes, t.metrics_retweets, t.metrics_replies,
+               t.reply_to_id, t.quoted_id, t.retweeted_id,
+               t.metrics_likes, t.metrics_retweets, t.metrics_replies,
                i.type as interaction_type, i.timestamp as interaction_timestamp,
                GROUP_CONCAT(DISTINCT COALESCE(m.local_path, m.url)) as media_urls
         FROM tweet t

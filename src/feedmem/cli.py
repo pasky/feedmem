@@ -281,18 +281,28 @@ def scrape(
     asyncio.run(run())
 
 
-def _format_tweet(r: db.SearchResult, verbose: bool = False) -> str:
+def _format_tweet(
+    r: db.SearchResult,
+    verbose: bool = False,
+    indent: str = "",
+    ref_type: str | None = None,
+) -> str:
     """Format a tweet for display."""
     itype = r.get("interaction_type", "")
-    prefix = f"[{itype}] " if itype else ""
+    if ref_type:
+        prefix = f"[{ref_type}] "
+    elif itype:
+        prefix = f"[{itype}] "
+    else:
+        prefix = ""
     handle = r["author_handle"] or "unknown"
     name = r.get("author_name") or ""
     created = r.get("created_at", "")
     content = r["content"] if verbose else r["content"][:256]
 
-    lines = [f"{prefix}@{handle}" + (f" ({name})" if name else "") + f" - {created}"]
-    lines.append(content)
-    lines.append(f"  https://x.com/{handle}/status/{r['id']}")
+    lines = [f"{indent}{prefix}@{handle}" + (f" ({name})" if name else "") + f" - {created}"]
+    lines.append(f"{indent}{content}")
+    lines.append(f"{indent}  https://x.com/{handle}/status/{r['id']}")
 
     metrics: list[str] = []
     if r.get("metrics_likes") is not None:
@@ -302,12 +312,35 @@ def _format_tweet(r: db.SearchResult, verbose: bool = False) -> str:
     if r.get("metrics_replies") is not None:
         metrics.append(f"💬 {r['metrics_replies']}")
     if metrics:
-        lines.append(f"  {' | '.join(metrics)}")
+        lines.append(f"{indent}  {' | '.join(metrics)}")
 
-    if r.get("reply_to_id"):
-        lines.append(f"  ↩ Reply to: https://x.com/i/status/{r['reply_to_id']}")
+    if r.get("reply_to_id") and not ref_type:
+        lines.append(f"{indent}  ↩ Reply to: https://x.com/i/status/{r['reply_to_id']}")
     if r.get("media_urls"):
-        lines.append(f"  Media: {r['media_urls']}")
+        lines.append(f"{indent}  Media: {r['media_urls']}")
+    return "\n".join(lines)
+
+
+async def _format_with_refs(
+    conn: db.aiosqlite.Connection,
+    r: db.SearchResult,
+    verbose: bool,
+) -> str:
+    """Format tweet with its referenced tweets (reply parent, quote, RT)."""
+    lines = [_format_tweet(r, verbose)]
+
+    refs = [
+        ("↩ reply to", r.get("reply_to_id")),
+        ("🔁 retweet of", r.get("retweeted_id")),
+        ("💬 quoting", r.get("quoted_id")),
+    ]
+    for label, ref_id in refs:
+        if ref_id:
+            ref_tweet = await db.get_tweet(conn, ref_id)
+            if ref_tweet:
+                lines.append(f"  ┌─ {label}:")
+                lines.append(_format_tweet(ref_tweet, verbose, indent="  │ ", ref_type="ref"))
+
     return "\n".join(lines)
 
 
@@ -320,23 +353,27 @@ def _format_tweet(r: db.SearchResult, verbose: bool = False) -> str:
 def list_cmd(interaction_type: str | None, limit: int, verbose: bool) -> None:
     """List your archived tweets."""
 
-    async def run() -> list[db.SearchResult]:
+    async def run() -> list[str]:
         conn = await db.init_db()
         try:
-            return await db.list_tweets(conn, interaction_type=interaction_type, limit=limit)
+            results = await db.list_tweets(conn, interaction_type=interaction_type, limit=limit)
+            formatted: list[str] = []
+            for r in results:
+                formatted.append(await _format_with_refs(conn, r, verbose))
+            return formatted
         finally:
             await conn.close()
 
-    results = asyncio.run(run())
-    if not results:
+    formatted_tweets = asyncio.run(run())
+    if not formatted_tweets:
         click.echo("No tweets found.")
         return
 
-    for r in results:
+    for tweet_str in formatted_tweets:
         click.echo(
             "--------------------------------------------------------------------------------"
         )
-        click.echo(_format_tweet(r, verbose))
+        click.echo(tweet_str)
         click.echo()
 
 
