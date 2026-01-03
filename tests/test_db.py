@@ -159,3 +159,48 @@ async def test_list_collapses_interaction_and_media(db: aiosqlite.Connection) ->
     urls = (results[0]["media_urls"] or "").split(",")
     assert set(urls) == {"https://example.com/1.jpg", "https://example.com/2.jpg"}
     assert results[0]["interaction_type"] == "bookmark"
+
+
+@pytest.mark.asyncio
+async def test_media_shared_across_tweets(db: aiosqlite.Connection) -> None:
+    """Same media ID appearing in multiple tweets should be deduplicated."""
+    await upsert_tweet(
+        db,
+        id="t1",
+        author_id="u1",
+        author_handle="alice",
+        content="original post",
+        created_at="2024-01-01T00:00:00Z",
+    )
+    await upsert_tweet(
+        db,
+        id="t2",
+        author_id="u2",
+        author_handle="bob",
+        content="retweet of original",
+        created_at="2024-01-02T00:00:00Z",
+    )
+    await add_media(
+        db,
+        id="shared_media",
+        tweet_id="t1",
+        url="https://example.com/shared.jpg",
+        mime_type="image/jpeg",
+    )
+    await add_media(
+        db,
+        id="shared_media",
+        tweet_id="t2",
+        url="https://example.com/shared.jpg",
+        mime_type="image/jpeg",
+    )
+
+    results = await list_tweets(db)
+    assert len(results) == 2
+    for r in results:
+        assert r["media_urls"] == "https://example.com/shared.jpg"
+
+    async with db.execute("SELECT COUNT(*) FROM media") as cursor:
+        row = await cursor.fetchone()
+        assert row is not None
+        assert row[0] == 1

@@ -34,15 +34,21 @@ CREATE TABLE IF NOT EXISTS interaction (
     UNIQUE(type, tweet_id)
 );
 
--- Media attachments
+-- Media attachments (deduplicated by Twitter media ID)
 CREATE TABLE IF NOT EXISTS media (
     id TEXT PRIMARY KEY,
-    tweet_id TEXT NOT NULL REFERENCES tweet(id),
     url TEXT NOT NULL,
     local_path TEXT,
     mime_type TEXT,
     extracted_text TEXT,  -- OCR results (future)
     embedding BLOB  -- vector for semantic search (future)
+);
+
+-- Junction table for tweet-media many-to-many relationship
+CREATE TABLE IF NOT EXISTS tweet_media (
+    tweet_id TEXT NOT NULL REFERENCES tweet(id),
+    media_id TEXT NOT NULL REFERENCES media(id),
+    PRIMARY KEY (tweet_id, media_id)
 );
 
 -- FTS5 virtual table for full-text search
@@ -77,7 +83,8 @@ CREATE INDEX IF NOT EXISTS idx_tweet_author ON tweet(author_handle);
 CREATE INDEX IF NOT EXISTS idx_tweet_created ON tweet(created_at);
 CREATE INDEX IF NOT EXISTS idx_interaction_type ON interaction(type);
 CREATE INDEX IF NOT EXISTS idx_interaction_tweet ON interaction(tweet_id);
-CREATE INDEX IF NOT EXISTS idx_media_tweet ON media(tweet_id);
+CREATE INDEX IF NOT EXISTS idx_tweet_media_tweet ON tweet_media(tweet_id);
+CREATE INDEX IF NOT EXISTS idx_tweet_media_media ON tweet_media(media_id);
 """
 
 
@@ -105,6 +112,18 @@ async def _migrate(db: aiosqlite.Connection) -> None:
         await db.execute("ALTER TABLE tweet ADD COLUMN quoted_id TEXT")
     if "retweeted_id" not in columns:
         await db.execute("ALTER TABLE tweet ADD COLUMN retweeted_id TEXT")
+
+    async with db.execute("PRAGMA table_info(media)") as cursor:
+        media_columns = {row[1] for row in await cursor.fetchall()}
+
+    if "tweet_id" in media_columns:
+        await db.execute(
+            """
+            INSERT OR IGNORE INTO tweet_media (tweet_id, media_id)
+            SELECT tweet_id, id FROM media
+            """
+        )
+        await db.execute("ALTER TABLE media DROP COLUMN tweet_id")
 
 
 async def upsert_tweet(
@@ -188,12 +207,20 @@ async def add_media(
 ) -> None:
     await db.execute(
         """
-        INSERT INTO media (id, tweet_id, url, local_path, mime_type)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO media (id, url, local_path, mime_type)
+        VALUES (?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
-            local_path = excluded.local_path
+            local_path = COALESCE(excluded.local_path, media.local_path)
         """,
-        (id, tweet_id, url, local_path, mime_type),
+        (id, url, local_path, mime_type),
+    )
+    await db.execute(
+        """
+        INSERT INTO tweet_media (tweet_id, media_id)
+        VALUES (?, ?)
+        ON CONFLICT DO NOTHING
+        """,
+        (tweet_id, id),
     )
     await db.commit()
 
@@ -209,7 +236,8 @@ async def get_tweet(db: aiosqlite.Connection, tweet_id: str) -> SearchResult | N
                t.metrics_likes, t.metrics_retweets, t.metrics_replies,
                GROUP_CONCAT(DISTINCT COALESCE(m.local_path, m.url)) as media_urls
         FROM tweet t
-        LEFT JOIN media m ON m.tweet_id = t.id
+        LEFT JOIN tweet_media tm ON tm.tweet_id = t.id
+        LEFT JOIN media m ON m.id = tm.media_id
         WHERE t.id = ?
         GROUP BY t.id
     """
@@ -247,7 +275,8 @@ async def list_tweets(
         FROM tweet t
         LEFT JOIN latest_interaction li ON li.tweet_id = t.id
         LEFT JOIN interaction i ON i.id = li.interaction_id
-        LEFT JOIN media m ON m.tweet_id = t.id
+        LEFT JOIN tweet_media tm ON tm.tweet_id = t.id
+        LEFT JOIN media m ON m.id = tm.media_id
     """
     if interaction_type:
         sql += " WHERE i.type IS NOT NULL"
