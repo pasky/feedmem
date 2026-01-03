@@ -378,7 +378,9 @@ def _format_tweet(
             desc = r["media_descriptions"]
             if not verbose and len(desc) > 120:
                 desc = desc[:117] + "..."
-            lines.append(f'{indent}    "{desc}"')
+            desc_lines = desc.split("\n")
+            for desc_line in desc_lines:
+                lines.append(f"{indent}    │ {desc_line}")
     return "\n".join(lines)
 
 
