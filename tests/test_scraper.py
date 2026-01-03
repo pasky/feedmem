@@ -5,10 +5,13 @@ from typing import Any
 
 from feedmem.scraper import (
     TweetCollector,
+    TweetDetailCollector,
     extract_instructions_bookmarks,
     extract_instructions_notifications,
     extract_instructions_user_timeline,
     get_auth_state_path,
+    get_media_dir,
+    get_referenced_ids,
     has_auth_state,
     parse_tweet_from_graphql,
 )
@@ -541,3 +544,150 @@ def _make_entry(tweet_id: str, text: str) -> dict[str, Any]:
             }
         }
     }
+
+
+def test_parse_tweet_with_quoted_tweet() -> None:
+    entry = {
+        "content": {
+            "itemContent": {
+                "tweet_results": {
+                    "result": {
+                        "__typename": "Tweet",
+                        "rest_id": "quote123",
+                        "legacy": {
+                            "full_text": "Check this out!",
+                            "created_at": "Mon Jan 01 00:00:00 +0000 2024",
+                        },
+                        "core": {
+                            "user_results": {
+                                "result": {
+                                    "rest_id": "quoter",
+                                    "legacy": {"screen_name": "quoter", "name": "Quoter"},
+                                }
+                            }
+                        },
+                        "quoted_status_result": {
+                            "result": {
+                                "__typename": "Tweet",
+                                "rest_id": "original456",
+                            }
+                        },
+                    }
+                }
+            }
+        }
+    }
+
+    tweet = parse_tweet_from_graphql(entry)
+    assert tweet is not None
+    assert tweet["id"] == "quote123"
+    assert tweet["quoted_id"] == "original456"
+
+
+def test_parse_tweet_with_video_media() -> None:
+    entry = {
+        "content": {
+            "itemContent": {
+                "tweet_results": {
+                    "result": {
+                        "__typename": "Tweet",
+                        "rest_id": "video123",
+                        "legacy": {
+                            "full_text": "Video tweet",
+                            "created_at": "Mon Jan 01 00:00:00 +0000 2024",
+                            "extended_entities": {
+                                "media": [
+                                    {
+                                        "id_str": "vid1",
+                                        "media_url_https": "https://pbs.twimg.com/thumb.jpg",
+                                        "type": "video",
+                                        "video_info": {
+                                            "variants": [
+                                                {
+                                                    "content_type": "application/x-mpegURL",
+                                                    "url": "https://video.twimg.com/playlist.m3u8",
+                                                },
+                                                {
+                                                    "content_type": "video/mp4",
+                                                    "bitrate": 832000,
+                                                    "url": "https://video.twimg.com/low.mp4",
+                                                },
+                                                {
+                                                    "content_type": "video/mp4",
+                                                    "bitrate": 2176000,
+                                                    "url": "https://video.twimg.com/high.mp4",
+                                                },
+                                            ]
+                                        },
+                                    }
+                                ]
+                            },
+                        },
+                        "core": {
+                            "user_results": {
+                                "result": {
+                                    "rest_id": "vid_user",
+                                    "legacy": {"screen_name": "vid_user", "name": "Video User"},
+                                }
+                            }
+                        },
+                    }
+                }
+            }
+        }
+    }
+
+    tweet = parse_tweet_from_graphql(entry)
+    assert tweet is not None
+    assert len(tweet["media"]) == 1
+    assert tweet["media"][0]["type"] == "video"
+    assert tweet["media"][0]["video_url"] == "https://video.twimg.com/high.mp4"
+
+
+def test_get_referenced_ids() -> None:
+    tweet: dict[str, Any] = {
+        "id": "123",
+        "reply_to_id": "parent1",
+        "quoted_id": "quoted2",
+        "retweeted_id": None,
+    }
+    refs = get_referenced_ids(tweet)
+    assert refs == ["parent1", "quoted2"]
+
+    tweet2: dict[str, Any] = {"id": "456"}
+    assert get_referenced_ids(tweet2) == []
+
+
+def test_tweet_detail_collector_extracts_from_result() -> None:
+    collector = TweetDetailCollector()
+    data = {
+        "data": {
+            "tweetResult": {
+                "result": {
+                    "__typename": "Tweet",
+                    "rest_id": "detail123",
+                    "legacy": {
+                        "full_text": "Detail tweet",
+                        "created_at": "Mon Jan 01 00:00:00 +0000 2024",
+                    },
+                    "core": {
+                        "user_results": {
+                            "result": {
+                                "rest_id": "detailuser",
+                                "legacy": {"screen_name": "detailuser", "name": "Detail User"},
+                            }
+                        }
+                    },
+                }
+            }
+        }
+    }
+    collector.extract(data)
+    assert collector.tweet is not None
+    assert collector.tweet["id"] == "detail123"
+
+
+def test_get_media_dir() -> None:
+    path = get_media_dir()
+    assert path.name == "media"
+    assert "feedmem" in str(path)

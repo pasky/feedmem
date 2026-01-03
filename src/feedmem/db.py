@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS tweet (
     content TEXT NOT NULL,
     created_at TEXT NOT NULL,
     reply_to_id TEXT,
+    quoted_id TEXT,
+    retweeted_id TEXT,
     thread_id TEXT,
     metrics_likes INTEGER,
     metrics_retweets INTEGER,
@@ -103,6 +105,8 @@ async def upsert_tweet(
     created_at: str,
     author_name: str | None = None,
     reply_to_id: str | None = None,
+    quoted_id: str | None = None,
+    retweeted_id: str | None = None,
     thread_id: str | None = None,
     metrics_likes: int | None = None,
     metrics_retweets: int | None = None,
@@ -112,9 +116,9 @@ async def upsert_tweet(
     await db.execute(
         """
         INSERT INTO tweet (id, author_id, author_handle, author_name, content, created_at,
-                          reply_to_id, thread_id, metrics_likes, metrics_retweets,
-                          metrics_replies, raw_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                          reply_to_id, quoted_id, retweeted_id, thread_id,
+                          metrics_likes, metrics_retweets, metrics_replies, raw_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             content = excluded.content,
             metrics_likes = excluded.metrics_likes,
@@ -130,6 +134,8 @@ async def upsert_tweet(
             content,
             created_at,
             reply_to_id,
+            quoted_id,
+            retweeted_id,
             thread_id,
             metrics_likes,
             metrics_retweets,

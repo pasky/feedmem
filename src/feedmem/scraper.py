@@ -3,10 +3,13 @@
 import asyncio
 import html
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
+import httpx
 from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import Page, Route, async_playwright
 
@@ -114,6 +117,74 @@ class ScrapeResult:
         return self.stop_reason.startswith("reached limit")
 
 
+def _extract_tweet_result(result: dict[str, Any]) -> TweetData | None:
+    """Parse tweet data from a GraphQL tweet result object."""
+    if result.get("__typename") == "TweetWithVisibilityResults":
+        result = result.get("tweet", {})
+
+    if not result or result.get("__typename") != "Tweet":
+        return None
+
+    legacy = result.get("legacy", {})
+    core = result.get("core", {})
+    user_results = core.get("user_results", {}).get("result", {})
+    user_legacy = user_results.get("legacy", {})
+    user_core = user_results.get("core", {})
+
+    tweet_id = result.get("rest_id")
+    if not tweet_id:
+        return None
+
+    quoted_id = None
+    quoted_result = result.get("quoted_status_result", {}).get("result", {})
+    if quoted_result:
+        qt = quoted_result
+        if qt.get("__typename") == "TweetWithVisibilityResults":
+            qt = qt.get("tweet", {})
+        quoted_id = qt.get("rest_id")
+
+    retweeted_id = legacy.get("retweeted_status_result", {}).get("result", {}).get("rest_id")
+    if not retweeted_id:
+        rt_result = legacy.get("retweeted_status_result", {}).get("result", {})
+        if rt_result.get("__typename") == "TweetWithVisibilityResults":
+            retweeted_id = rt_result.get("tweet", {}).get("rest_id")
+
+    media_list: list[dict[str, Any]] = []
+    for m in legacy.get("extended_entities", {}).get("media", []):
+        media_entry: dict[str, Any] = {
+            "id": m.get("id_str", ""),
+            "url": m.get("media_url_https", ""),
+            "type": m.get("type", ""),
+        }
+        if m.get("type") == "video" or m.get("type") == "animated_gif":
+            variants = m.get("video_info", {}).get("variants", [])
+            best = max(
+                (v for v in variants if v.get("content_type") == "video/mp4"),
+                key=lambda v: v.get("bitrate", 0),
+                default=None,
+            )
+            if best:
+                media_entry["video_url"] = best.get("url")
+        media_list.append(media_entry)
+
+    return {
+        "id": tweet_id,
+        "author_id": user_results.get("rest_id", ""),
+        "author_handle": user_core.get("screen_name") or user_legacy.get("screen_name", ""),
+        "author_name": user_core.get("name") or user_legacy.get("name", ""),
+        "content": html.unescape(legacy.get("full_text", "")),
+        "created_at": parse_twitter_timestamp(legacy.get("created_at", "")),
+        "reply_to_id": legacy.get("in_reply_to_status_id_str"),
+        "quoted_id": quoted_id,
+        "retweeted_id": retweeted_id,
+        "metrics_likes": legacy.get("favorite_count"),
+        "metrics_retweets": legacy.get("retweet_count"),
+        "metrics_replies": legacy.get("reply_count"),
+        "media": media_list,
+        "raw_json": json.dumps(result),
+    }
+
+
 def parse_tweet_from_graphql(entry: dict[str, Any]) -> TweetData | None:
     """Extract tweet data from Twitter's GraphQL response format."""
     try:
@@ -137,43 +208,7 @@ def parse_tweet_from_graphql(entry: dict[str, Any]) -> TweetData | None:
             tweet_results = item_content.get("tweet_results", {})
         result = tweet_results.get("result", {})
 
-        if result.get("__typename") == "TweetWithVisibilityResults":
-            result = result.get("tweet", {})
-
-        if not result or result.get("__typename") != "Tweet":
-            return None
-
-        legacy = result.get("legacy", {})
-        core = result.get("core", {})
-        user_results = core.get("user_results", {}).get("result", {})
-        user_legacy = user_results.get("legacy", {})
-        user_core = user_results.get("core", {})
-
-        tweet_id = result.get("rest_id")
-        if not tweet_id:
-            return None
-
-        return {
-            "id": tweet_id,
-            "author_id": user_results.get("rest_id", ""),
-            "author_handle": user_core.get("screen_name") or user_legacy.get("screen_name", ""),
-            "author_name": user_core.get("name") or user_legacy.get("name", ""),
-            "content": html.unescape(legacy.get("full_text", "")),
-            "created_at": parse_twitter_timestamp(legacy.get("created_at", "")),
-            "reply_to_id": legacy.get("in_reply_to_status_id_str"),
-            "metrics_likes": legacy.get("favorite_count"),
-            "metrics_retweets": legacy.get("retweet_count"),
-            "metrics_replies": legacy.get("reply_count"),
-            "media": [
-                {
-                    "id": m.get("id_str", ""),
-                    "url": m.get("media_url_https", ""),
-                    "type": m.get("type", ""),
-                }
-                for m in legacy.get("extended_entities", {}).get("media", [])
-            ],
-            "raw_json": json.dumps(result),
-        }
+        return _extract_tweet_result(result)
     except (KeyError, TypeError):
         return None
 
@@ -452,3 +487,118 @@ async def _get_username(page: Page) -> str:
     if href:
         return href.strip("/")
     raise RuntimeError("Could not determine username")
+
+
+MEDIA_DIR = Path.home() / ".local" / "share" / "feedmem" / "media"
+
+
+def get_media_dir() -> Path:
+    """Return the directory where media files are stored."""
+    return MEDIA_DIR
+
+
+async def download_media(
+    url: str,
+    tweet_id: str,
+    media_id: str,
+) -> Path | None:
+    """Download media file and return local path. Returns None on failure."""
+    MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+
+    parsed = urlparse(url)
+    ext = Path(parsed.path).suffix or ".jpg"
+    ext = re.sub(r"\?.*", "", ext)
+    local_path = MEDIA_DIR / f"{tweet_id}_{media_id}{ext}"
+
+    if local_path.exists():
+        return local_path
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            local_path.write_bytes(resp.content)
+        return local_path
+    except httpx.HTTPError:
+        return None
+
+
+class TweetDetailCollector:
+    """Collects tweet data from TweetDetail GraphQL responses."""
+
+    def __init__(self) -> None:
+        self.tweet: TweetData | None = None
+
+    async def handle_response(self, route: Route) -> None:
+        try:
+            response = await route.fetch()
+            try:
+                body = await response.json()
+                self.extract(body)
+            except (json.JSONDecodeError, ValueError):
+                pass
+            await route.fulfill(response=response)
+        except PlaywrightError as e:
+            if "disposed" not in str(e):
+                raise
+
+    def extract(self, data: dict[str, Any]) -> None:
+        instructions = data.get("data", {}).get("tweetResult", {}).get("result", {})
+        if instructions and instructions.get("__typename") == "Tweet":
+            self.tweet = _extract_tweet_result(instructions)
+            return
+
+        instructions = (
+            data.get("data", {})
+            .get("threaded_conversation_with_injections_v2", {})
+            .get("instructions", [])
+        )
+        for inst in instructions:
+            for entry in inst.get("entries", []):
+                content = entry.get("content", {})
+                item_content = content.get("itemContent", {})
+                result = item_content.get("tweet_results", {}).get("result", {})
+                if result:
+                    tweet = _extract_tweet_result(result)
+                    if tweet:
+                        self.tweet = tweet
+                        return
+
+
+async def scrape_tweet(
+    tweet_id: str,
+    headless: bool = True,
+) -> TweetData | None:
+    """Scrape a single tweet by ID. Returns tweet data or None if not found."""
+    if not has_auth_state():
+        raise RuntimeError("Not logged in. Run 'feedmem login' first.")
+
+    collector = TweetDetailCollector()
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=headless)
+        context = await browser.new_context(storage_state=str(AUTH_STATE_PATH))
+        page = await context.new_page()
+
+        await page.route("**/TweetDetail?*", collector.handle_response)
+        await page.route("**/TweetResultByRestId?*", collector.handle_response)
+
+        await page.goto(f"{TWITTER_URL}/i/status/{tweet_id}")
+        await page.wait_for_load_state("domcontentloaded")
+        await page.wait_for_timeout(3000)
+
+        await browser.close()
+
+    return collector.tweet
+
+
+def get_referenced_ids(tweet: TweetData) -> list[str]:
+    """Get list of tweet IDs referenced by this tweet (reply parent, quote, RT)."""
+    refs: list[str] = []
+    if tweet.get("reply_to_id"):
+        refs.append(tweet["reply_to_id"])
+    if tweet.get("quoted_id"):
+        refs.append(tweet["quoted_id"])
+    if tweet.get("retweeted_id"):
+        refs.append(tweet["retweeted_id"])
+    return refs
