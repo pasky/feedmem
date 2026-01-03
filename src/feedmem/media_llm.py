@@ -74,7 +74,8 @@ def _extract_first_frame(video_path: Path) -> Path | None:
             check=True,
         )
         return out_path
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        print(f"media_llm: ffmpeg failed: {e}", file=sys.stderr)
         return None
 
 
