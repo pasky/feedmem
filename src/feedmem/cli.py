@@ -330,7 +330,9 @@ def _format_tweet(
     content = r["content"] if verbose else r["content"][:256]
 
     lines = [f"{indent}{prefix}@{handle}" + (f" ({name})" if name else "") + f" - {created}"]
-    lines.append(f"{indent}{content}")
+    content_lines = content.split("\n")
+    for content_line in content_lines:
+        lines.append(f"{indent}{content_line}")
     lines.append(f"{indent}  https://x.com/{handle}/status/{r['id']}")
 
     metrics: list[str] = []

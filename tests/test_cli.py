@@ -107,3 +107,40 @@ def test_scrape_requires_auth(tmp_path: Path, source: str) -> None:
     assert result.exit_code != 0
     assert isinstance(result.exception, RuntimeError)
     assert "Not logged in" in str(result.exception)
+
+
+def test_list_multiline_tweet(tmp_path: Path) -> None:
+    archive_path = tmp_path / "archive.zip"
+    tweets_data = [
+        {
+            "tweet": {
+                "id_str": "789",
+                "full_text": "Line one\nLine two\nLine three",
+                "created_at": "Wed Jan 03 10:00:00 +0000 2024",
+            }
+        }
+    ]
+    js_content = f"window.YTD.tweets.part0 = {json.dumps(tweets_data)}"
+    with zipfile.ZipFile(archive_path, "w") as zf:
+        zf.writestr("data/tweets.js", js_content)
+
+    runner = CliRunner()
+    db_path = tmp_path / "multiline_test.db"
+    with patch("feedmem.cli.db.init_db") as mock_init:
+        import aiosqlite
+
+        from feedmem.db import SCHEMA
+
+        async def fast_init(path: Path | None = None) -> aiosqlite.Connection:
+            conn = await aiosqlite.connect(path or db_path)
+            await conn.execute("PRAGMA synchronous = OFF")
+            await conn.executescript(SCHEMA)
+            await conn.commit()
+            return conn
+
+        mock_init.side_effect = fast_init
+        runner.invoke(main, ["ingest", str(archive_path), "--username", "testuser"])
+        result = runner.invoke(main, ["list", "--limit", "1"])
+
+    assert result.exit_code == 0
+    assert "Line one\nLine two\nLine three" in result.output
