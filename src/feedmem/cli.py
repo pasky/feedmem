@@ -155,20 +155,20 @@ async def _scrape_referenced(
     if not to_scrape:
         return 0
 
-    if verbose:
-        click.echo(f"  Scraping {len(to_scrape)} referenced tweets (depth={depth})...")
+    click.echo(f"  Fetching {len(to_scrape)} referenced tweets (depth={depth})...")
 
     count = 0
     next_refs: list[str] = []
 
-    for tid in to_scrape:
+    for i, tid in enumerate(to_scrape, 1):
         tweet = await scraper.scrape_tweet(tid, headless=headless)
         if tweet:
+            click.echo(
+                f"    [{i}/{len(to_scrape)}] @{tweet['author_handle']}: {tweet['content'][:40]}..."
+            )
             await _save_tweet(conn, tweet, download_media=download_media, verbose=verbose)
             count += 1
             next_refs.extend(scraper.get_referenced_ids(tweet))
-            if verbose:
-                click.echo(f"    Scraped @{tweet['author_handle']}: {tweet['content'][:40]}...")
 
     if next_refs:
         count += await _scrape_referenced(
