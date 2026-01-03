@@ -91,8 +91,20 @@ async def init_db(db_path: Path | None = None) -> aiosqlite.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     db = await aiosqlite.connect(db_path)
     await db.executescript(SCHEMA)
+    await _migrate(db)
     await db.commit()
     return db
+
+
+async def _migrate(db: aiosqlite.Connection) -> None:
+    """Apply schema migrations for existing databases."""
+    async with db.execute("PRAGMA table_info(tweet)") as cursor:
+        columns = {row[1] for row in await cursor.fetchall()}
+
+    if "quoted_id" not in columns:
+        await db.execute("ALTER TABLE tweet ADD COLUMN quoted_id TEXT")
+    if "retweeted_id" not in columns:
+        await db.execute("ALTER TABLE tweet ADD COLUMN retweeted_id TEXT")
 
 
 async def upsert_tweet(
