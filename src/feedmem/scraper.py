@@ -472,7 +472,7 @@ async def _scrape_timeline(
             print(f"Scrape finished: {stop_reason}, collected {len(collector.tweets)} new items")
 
         await page.unroute(endpoint_pattern)
-        await page.wait_for_timeout(100)  # Let pending route handlers complete
+        await page.close()
         await browser.close()
 
     tweets = collector.tweets[:max_items] if max_items > 0 else collector.tweets
@@ -590,7 +590,7 @@ async def scrape_tweet(
 
         await page.unroute("**/TweetDetail?*")
         await page.unroute("**/TweetResultByRestId?*")
-        await page.wait_for_timeout(100)  # Let pending route handlers complete
+        await page.close()
         await browser.close()
 
     return collector.tweet
