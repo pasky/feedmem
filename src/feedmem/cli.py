@@ -7,7 +7,7 @@ from pathlib import Path
 
 import click
 
-from feedmem import db, gdpr, scraper
+from feedmem import db, gdpr, media_llm, scraper
 
 
 @click.group()
@@ -93,6 +93,7 @@ async def _save_tweet(
     interaction_type: str | None = None,
     interaction_timestamp: str | None = None,
     download_media: bool = False,
+    describe_media: bool = False,
     verbose: bool = False,
 ) -> None:
     """Save a single tweet to db, optionally downloading media."""
@@ -129,6 +130,12 @@ async def _save_tweet(
             click.echo(f"    Downloading media {media['id']}...")
             path = await scraper.download_media(url, media["id"])
             local_path = str(path) if path else None
+        description = None
+        if describe_media and local_path:
+            click.echo(f"    Describing media {media['id']} via LLM...")
+            description = await media_llm.describe_media(Path(local_path))
+            if description:
+                click.echo(f"      -> {description[:80]}...")
         await db.add_media(
             conn,
             id=media["id"],
@@ -136,6 +143,7 @@ async def _save_tweet(
             url=url or "",
             local_path=local_path,
             mime_type=media.get("type"),
+            description=description,
         )
 
 
@@ -145,6 +153,7 @@ async def _scrape_referenced(
     depth: int,
     headless: bool,
     download_media: bool,
+    describe_media: bool,
     verbose: bool,
 ) -> int:
     """Recursively scrape referenced tweets. Returns count of newly scraped tweets."""
@@ -167,13 +176,19 @@ async def _scrape_referenced(
             click.echo(
                 f"    [{i}/{len(to_scrape)}] @{tweet['author_handle']}: {tweet['content'][:40]}..."
             )
-            await _save_tweet(conn, tweet, download_media=download_media, verbose=verbose)
+            await _save_tweet(
+                conn,
+                tweet,
+                download_media=download_media,
+                describe_media=describe_media,
+                verbose=verbose,
+            )
             count += 1
             next_refs.extend(scraper.get_referenced_ids(tweet))
 
     if next_refs:
         count += await _scrape_referenced(
-            conn, next_refs, depth - 1, headless, download_media, verbose
+            conn, next_refs, depth - 1, headless, download_media, describe_media, verbose
         )
 
     return count
@@ -188,6 +203,7 @@ async def _scrape_source(
     verbose: bool,
     recursion_depth: int = 0,
     download_media: bool = False,
+    describe_media: bool = False,
 ) -> tuple[scraper.ScrapeResult, int]:
     """Scrape a single source and save to db. Returns (scrape result, ref count)."""
     click.echo(f"Scraping {source}...")
@@ -219,6 +235,7 @@ async def _scrape_source(
             interaction_type=tweet["interaction_type"],
             interaction_timestamp=tweet.get("interaction_timestamp"),
             download_media=download_media,
+            describe_media=describe_media,
             verbose=verbose,
         )
         all_refs.extend(scraper.get_referenced_ids(tweet))
@@ -226,7 +243,7 @@ async def _scrape_source(
     ref_count = 0
     if recursion_depth > 0 and all_refs:
         ref_count = await _scrape_referenced(
-            conn, all_refs, recursion_depth, headless, download_media, verbose
+            conn, all_refs, recursion_depth, headless, download_media, describe_media, verbose
         )
 
     return result, ref_count
@@ -248,6 +265,11 @@ async def _scrape_source(
 @click.option(
     "--download-media/--no-download-media", default=True, help="Download media files locally"
 )
+@click.option(
+    "--describe-media/--no-describe-media",
+    default=media_llm.is_available(),
+    help="Describe media via LLM (requires llm extra)",
+)
 @click.option("--continuous", is_flag=True, help="Run continuously, refreshing at interval")
 @click.option(
     "--interval",
@@ -263,6 +285,7 @@ def scrape(
     verbose: bool,
     recursion_depth: int,
     download_media: bool,
+    describe_media: bool,
     continuous: bool,
     interval: int,
 ) -> None:
@@ -280,6 +303,7 @@ def scrape(
                 verbose,
                 recursion_depth=recursion_depth,
                 download_media=download_media,
+                describe_media=describe_media,
             )
             msg = f"Saved {len(result.tweets)} new {src}"
             if ref_count:

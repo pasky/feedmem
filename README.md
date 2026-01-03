@@ -92,7 +92,7 @@ feedmem scrape likes --no-headless         # Show browser (for debugging)
 feedmem scrape likes --recursion 2         # Fetch referenced tweets 2 levels deep
 feedmem scrape likes --recursion 0         # Don't fetch referenced tweets (default: 1)
 feedmem scrape likes --no-download-media   # Skip downloading images/videos (default: download)
-feedmem scrape likes --no-media-llm        # Skip LLM descriptions (default: on if llm installed)
+feedmem scrape likes --no-describe-media   # Skip LLM descriptions (default: on if llm installed)
 
 # Import GDPR archive (your own tweets)
 feedmem ingest archive.zip --username yourhandle

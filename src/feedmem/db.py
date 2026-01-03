@@ -123,6 +123,7 @@ async def _migrate(db: aiosqlite.Connection) -> None:
             SELECT tweet_id, id FROM media
             """
         )
+        await db.execute("DROP INDEX IF EXISTS idx_media_tweet")
         await db.execute("ALTER TABLE media DROP COLUMN tweet_id")
 
     if "extracted_text" in media_columns:

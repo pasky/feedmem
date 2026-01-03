@@ -26,6 +26,11 @@ MAX_RETRIES = 5
 INITIAL_BACKOFF = 1.0
 
 
+def is_available() -> bool:
+    """Check if LLM library is available."""
+    return _llm is not None
+
+
 async def describe_image(path: Path) -> str | None:
     """Describe an image using LLM. Returns None on failure."""
     if _llm is None:
@@ -73,8 +78,10 @@ def _extract_first_frame(video_path: Path) -> Path | None:
         return None
 
 
-async def describe_video(path: Path) -> str | None:
+async def describe_video(path: Path, echo: bool = True) -> str | None:
     """Describe video's first frame using LLM. Returns None on failure."""
+    if echo:
+        print(f"      Extracting first frame from {path.name}...", file=sys.stderr)
     frame_path = await asyncio.to_thread(_extract_first_frame, path)
     if not frame_path:
         return None
@@ -84,11 +91,11 @@ async def describe_video(path: Path) -> str | None:
         frame_path.unlink(missing_ok=True)
 
 
-async def describe_media(path: Path) -> str | None:
+async def describe_media(path: Path, echo: bool = True) -> str | None:
     """Describe media file (image or video). Returns None on failure."""
     suffix = path.suffix.lower()
     if suffix in (".mp4", ".mov", ".webm", ".avi"):
-        return await describe_video(path)
+        return await describe_video(path, echo=echo)
     elif suffix in (".jpg", ".jpeg", ".png", ".gif", ".webp"):
         return await describe_image(path)
     return None
