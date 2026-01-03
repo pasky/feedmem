@@ -7,6 +7,8 @@ Archive your Twitter/X activity (likes, bookmarks, tweets, replies, notification
 ## Features
 
 - **Scrape likes & bookmarks** via headless browser (no API needed)
+- **Recursive scraping** of referenced tweets (reply parents, quotes, RTs)
+- **Media download** for images and videos
 - **Import GDPR data exports** for your own tweets
 - **Full-text search** with SQLite FTS5
 - **Works on headless servers** via auth state import
@@ -82,6 +84,9 @@ feedmem scrape likes                       # Scrape your likes (up to 100)
 feedmem scrape bookmarks                   # Scrape bookmarks (up to 100)
 feedmem scrape likes --limit 0             # Unlimited (scrape all)
 feedmem scrape likes --no-headless         # Show browser (for debugging)
+feedmem scrape likes --recursion 2         # Fetch referenced tweets 2 levels deep
+feedmem scrape likes --recursion 0         # Don't fetch referenced tweets (default: 1)
+feedmem scrape likes --download-media      # Download images/videos locally
 
 # Import GDPR archive (your own tweets)
 feedmem ingest archive.zip --username yourhandle
@@ -97,6 +102,7 @@ feedmem search "query" --limit 20          # Limit results
 
 - Database: `~/.local/share/feedmem/feedmem.db` (SQLite)
 - Auth state: `~/.local/share/feedmem/auth_state.json`
+- Media files: `~/.local/share/feedmem/media/` (when using `--download-media`)
 
 ## Development
 

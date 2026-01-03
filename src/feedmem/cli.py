@@ -236,7 +236,8 @@ async def _scrape_source(
     "--recursion",
     "recursion_depth",
     default=1,
-    help="Recursion depth for fetching referenced tweets (0=none)",
+    show_default=True,
+    help="Depth for fetching referenced tweets (reply parents, quotes, RTs)",
 )
 @click.option("--download-media", is_flag=True, help="Download media files locally")
 def scrape(
