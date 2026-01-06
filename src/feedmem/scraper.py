@@ -336,7 +336,7 @@ class TweetCollector:
 async def scrape_likes(
     max_items: int = 0,
     headless: bool = True,
-    scroll_delay_ms: int = 500,
+    scroll_delay_ms: int = 2000,
     known_ids: set[str] | None = None,
     verbose: bool = False,
     skip: int = 0,
@@ -358,7 +358,7 @@ async def scrape_likes(
 async def scrape_bookmarks(
     max_items: int = 0,
     headless: bool = True,
-    scroll_delay_ms: int = 500,
+    scroll_delay_ms: int = 2000,
     known_ids: set[str] | None = None,
     verbose: bool = False,
     skip: int = 0,
@@ -381,7 +381,7 @@ async def scrape_bookmarks(
 async def scrape_notifications(
     max_items: int = 0,
     headless: bool = True,
-    scroll_delay_ms: int = 500,
+    scroll_delay_ms: int = 2000,
     known_ids: set[str] | None = None,
     verbose: bool = False,
     skip: int = 0,
@@ -404,7 +404,7 @@ async def scrape_notifications(
 async def scrape_profile(
     max_items: int = 0,
     headless: bool = True,
-    scroll_delay_ms: int = 500,
+    scroll_delay_ms: int = 2000,
     known_ids: set[str] | None = None,
     verbose: bool = False,
     skip: int = 0,
