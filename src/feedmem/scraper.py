@@ -286,7 +286,7 @@ class TweetCollector:
                 pass
             await route.fulfill(response=response)
         except PlaywrightError as e:
-            if "disposed" not in str(e):
+            if "disposed" not in str(e) and "already handled" not in str(e):
                 raise
 
     def extract_tweets(self, data: dict[str, Any]) -> None:
@@ -559,7 +559,7 @@ class TweetDetailCollector:
                 pass
             await route.fulfill(response=response)
         except PlaywrightError as e:
-            if "disposed" not in str(e):
+            if "disposed" not in str(e) and "already handled" not in str(e):
                 raise
 
     def extract(self, data: dict[str, Any]) -> None:
