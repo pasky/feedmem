@@ -204,6 +204,7 @@ async def _scrape_source(
     recursion_depth: int = 0,
     download_media: bool = False,
     describe_media: bool = False,
+    skip: int = 0,
 ) -> tuple[scraper.ScrapeResult, int]:
     """Scrape a single source and save to db. Returns (scrape result, ref count)."""
     click.echo(f"Scraping {source}...")
@@ -222,6 +223,7 @@ async def _scrape_source(
         headless=headless,
         known_ids=known_ids,
         verbose=verbose,
+        skip=skip,
     )
 
     all_refs: list[str] = []
@@ -277,6 +279,7 @@ async def _scrape_source(
     show_default=True,
     help="Seconds between refreshes in continuous mode (10%% random jitter applied)",
 )
+@click.option("--skip", default=0, help="Skip first N tweets (for resuming interrupted scrapes)")
 def scrape(
     source: str,
     max_items: int,
@@ -288,6 +291,7 @@ def scrape(
     describe_media: bool,
     continuous: bool,
     interval: int,
+    skip: int,
 ) -> None:
     """Scrape likes, bookmarks, notifications, profile, or all from Twitter/X."""
     sources = SCRAPE_SOURCES if source == "all" else [source]
@@ -304,6 +308,7 @@ def scrape(
                 recursion_depth=recursion_depth,
                 download_media=download_media,
                 describe_media=describe_media,
+                skip=skip,
             )
             msg = f"Saved {len(result.tweets)} new {src}"
             if ref_count:

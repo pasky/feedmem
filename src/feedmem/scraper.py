@@ -259,6 +259,7 @@ class TweetCollector:
         known_ids: set[str] | None = None,
         verbose: bool = False,
         extractor: str = "user_timeline",
+        skip: int = 0,
     ) -> None:
         self.tweets: list[TweetData] = []
         self.interaction_type = interaction_type
@@ -268,6 +269,8 @@ class TweetCollector:
         self.should_stop: bool = False
         self._verbose = verbose
         self._extractor = extractor
+        self._skip = skip
+        self._skipped: int = 0
 
     @property
     def consecutive_known(self) -> int:
@@ -300,6 +303,13 @@ class TweetCollector:
                 tweet = parse_tweet_from_graphql(entry)
                 if tweet and tweet["id"] not in self._seen_ids:
                     self._seen_ids.add(tweet["id"])
+                    if self._skipped < self._skip:
+                        self._skipped += 1
+                        if self._verbose:
+                            handle = tweet["author_handle"]
+                            preview = tweet["content"][:50]
+                            print(f"  [skip {self._skipped}/{self._skip}] @{handle}: {preview}...")
+                        continue
                     if tweet["id"] in self._known_ids:
                         self._consecutive_known += 1
                         if self._verbose:
@@ -329,6 +339,7 @@ async def scrape_likes(
     scroll_delay_ms: int = 500,
     known_ids: set[str] | None = None,
     verbose: bool = False,
+    skip: int = 0,
 ) -> ScrapeResult:
     """Scrape liked tweets from Twitter/X."""
     return await _scrape_timeline(
@@ -340,6 +351,7 @@ async def scrape_likes(
         scroll_delay_ms=scroll_delay_ms,
         known_ids=known_ids,
         verbose=verbose,
+        skip=skip,
     )
 
 
@@ -349,6 +361,7 @@ async def scrape_bookmarks(
     scroll_delay_ms: int = 500,
     known_ids: set[str] | None = None,
     verbose: bool = False,
+    skip: int = 0,
 ) -> ScrapeResult:
     """Scrape bookmarked tweets from Twitter/X."""
     return await _scrape_timeline(
@@ -361,6 +374,7 @@ async def scrape_bookmarks(
         known_ids=known_ids,
         verbose=verbose,
         extractor="bookmarks",
+        skip=skip,
     )
 
 
@@ -370,6 +384,7 @@ async def scrape_notifications(
     scroll_delay_ms: int = 500,
     known_ids: set[str] | None = None,
     verbose: bool = False,
+    skip: int = 0,
 ) -> ScrapeResult:
     """Scrape notifications (mentions/replies to you) from Twitter/X."""
     return await _scrape_timeline(
@@ -382,6 +397,7 @@ async def scrape_notifications(
         known_ids=known_ids,
         verbose=verbose,
         extractor="notifications",
+        skip=skip,
     )
 
 
@@ -391,6 +407,7 @@ async def scrape_profile(
     scroll_delay_ms: int = 500,
     known_ids: set[str] | None = None,
     verbose: bool = False,
+    skip: int = 0,
 ) -> ScrapeResult:
     """Scrape your own posts and replies from Twitter/X."""
     return await _scrape_timeline(
@@ -402,6 +419,7 @@ async def scrape_profile(
         scroll_delay_ms=scroll_delay_ms,
         known_ids=known_ids,
         verbose=verbose,
+        skip=skip,
     )
 
 
@@ -415,6 +433,7 @@ async def _scrape_timeline(
     known_ids: set[str] | None = None,
     verbose: bool = False,
     extractor: str = "user_timeline",
+    skip: int = 0,
 ) -> ScrapeResult:
     """Generic timeline scraper using GraphQL interception."""
     if not has_auth_state():
@@ -422,10 +441,10 @@ async def _scrape_timeline(
 
     if verbose:
         known_count = len(known_ids) if known_ids else 0
-        print(f"Starting {interaction_type} scrape (known: {known_count} items)")
+        print(f"Starting {interaction_type} scrape (known: {known_count} items, skip: {skip})")
 
     collector = TweetCollector(
-        interaction_type, known_ids=known_ids, verbose=verbose, extractor=extractor
+        interaction_type, known_ids=known_ids, verbose=verbose, extractor=extractor, skip=skip
     )
 
     async with async_playwright() as p:
