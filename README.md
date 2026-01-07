@@ -95,6 +95,7 @@ feedmem scrape likes --no-download-media   # Skip downloading images/videos (def
 feedmem scrape likes --no-describe-media   # Skip LLM descriptions (default: on if llm installed)
 
 # Import GDPR archive (your own tweets)
+# NOTE: This is untested (as X didn't send me my requested GDPR dump in 6 days and counting)
 feedmem ingest archive.zip --username yourhandle
 
 # Search
