@@ -500,13 +500,24 @@ async def _scrape_timeline(
 
 async def _get_username(page: Page) -> str:
     """Get current logged-in username from page."""
-    await page.goto(f"{TWITTER_URL}/home")
+    max_attempts = 5
+    base_delay = 10.0
 
-    profile_link = page.locator('a[data-testid="AppTabBar_Profile_Link"]')
-    await profile_link.wait_for(timeout=15000)
-    href = await profile_link.get_attribute("href")
-    if href:
-        return href.strip("/")
+    for attempt in range(max_attempts):
+        try:
+            await page.goto(f"{TWITTER_URL}/home")
+            profile_link = page.locator('a[data-testid="AppTabBar_Profile_Link"]')
+            await profile_link.wait_for(timeout=15000)
+            href = await profile_link.get_attribute("href")
+            if href:
+                return href.strip("/")
+        except PlaywrightError as e:
+            if "Timeout" not in str(e) or attempt == max_attempts - 1:
+                raise
+            delay = base_delay * (2**attempt)
+            print(f"Timeout getting username, retry in {delay:.0f}s ({attempt + 1}/{max_attempts})")
+            await asyncio.sleep(delay)
+
     raise RuntimeError("Could not determine username")
 
 
