@@ -234,26 +234,65 @@ async def add_media(
 SearchResult = dict[str, Any]
 
 
+class MediaItem:
+    __slots__ = ("url", "description")
+
+    def __init__(self, url: str, description: str | None) -> None:
+        self.url = url
+        self.description = description
+
+
+async def get_tweet_media(
+    db: aiosqlite.Connection, tweet_ids: list[str]
+) -> dict[str, list[MediaItem]]:
+    """Fetch media for multiple tweets, returning {tweet_id: [MediaItem, ...]}."""
+    if not tweet_ids:
+        return {}
+    placeholders = ",".join("?" * len(tweet_ids))
+    sql = f"""
+        SELECT tm.tweet_id, COALESCE(m.local_path, m.url) as url, m.description
+        FROM tweet_media tm
+        JOIN media m ON m.id = tm.media_id
+        WHERE tm.tweet_id IN ({placeholders})
+    """
+    result: dict[str, list[MediaItem]] = {}
+    async with db.execute(sql, tweet_ids) as cursor:
+        async for row in cursor:
+            tweet_id, url, description = row
+            if tweet_id not in result:
+                result[tweet_id] = []
+            result[tweet_id].append(MediaItem(url, description))
+    return result
+
+
+async def _enrich_with_media(
+    db: aiosqlite.Connection, results: list[SearchResult]
+) -> list[SearchResult]:
+    """Add media list to each result."""
+    tweet_ids = [r["id"] for r in results]
+    media_map = await get_tweet_media(db, tweet_ids)
+    for r in results:
+        r["media"] = media_map.get(r["id"], [])
+    return results
+
+
 async def get_tweet(db: aiosqlite.Connection, tweet_id: str) -> SearchResult | None:
     """Get a single tweet by ID."""
     sql = """
         SELECT t.id, t.author_id, t.author_handle, t.author_name, t.content, t.created_at,
                t.reply_to_id, t.quoted_id, t.retweeted_id,
-               t.metrics_likes, t.metrics_retweets, t.metrics_replies,
-               GROUP_CONCAT(DISTINCT COALESCE(m.local_path, m.url)) as media_urls,
-               GROUP_CONCAT(DISTINCT m.description) as media_descriptions
+               t.metrics_likes, t.metrics_retweets, t.metrics_replies
         FROM tweet t
-        LEFT JOIN tweet_media tm ON tm.tweet_id = t.id
-        LEFT JOIN media m ON m.id = tm.media_id
         WHERE t.id = ?
-        GROUP BY t.id
     """
     async with db.execute(sql, (tweet_id,)) as cursor:
         row = await cursor.fetchone()
         if not row:
             return None
         columns = [d[0] for d in cursor.description] if cursor.description else []
-        return dict(zip(columns, row, strict=False))
+        result = dict(zip(columns, row, strict=False))
+    results = await _enrich_with_media(db, [result])
+    return results[0]
 
 
 async def list_tweets(
@@ -277,19 +316,14 @@ async def list_tweets(
         SELECT t.id, t.author_id, t.author_handle, t.author_name, t.content, t.created_at,
                t.reply_to_id, t.quoted_id, t.retweeted_id,
                t.metrics_likes, t.metrics_retweets, t.metrics_replies,
-               i.type as interaction_type, i.timestamp as interaction_timestamp,
-               GROUP_CONCAT(DISTINCT COALESCE(m.local_path, m.url)) as media_urls,
-               GROUP_CONCAT(DISTINCT m.description) as media_descriptions
+               i.type as interaction_type, i.timestamp as interaction_timestamp
         FROM tweet t
         LEFT JOIN latest_interaction li ON li.tweet_id = t.id
         LEFT JOIN interaction i ON i.id = li.interaction_id
-        LEFT JOIN tweet_media tm ON tm.tweet_id = t.id
-        LEFT JOIN media m ON m.id = tm.media_id
     """
     if interaction_type:
         sql += " WHERE i.type IS NOT NULL"
     sql += """
-        GROUP BY t.id
         ORDER BY COALESCE(i.timestamp, t.created_at) DESC
         LIMIT ?
     """
@@ -298,7 +332,8 @@ async def list_tweets(
     async with db.execute(sql, params) as cursor:
         rows = await cursor.fetchall()
         columns = [d[0] for d in cursor.description] if cursor.description else []
-        return [dict(zip(columns, row, strict=False)) for row in rows]
+        results = [dict(zip(columns, row, strict=False)) for row in rows]
+    return await _enrich_with_media(db, results)
 
 
 async def get_tweet_ids(
@@ -354,21 +389,16 @@ async def search_tweets(
         SELECT t.id, t.author_id, t.author_handle, t.author_name, t.content, t.created_at,
                t.reply_to_id, t.quoted_id, t.retweeted_id,
                t.metrics_likes, t.metrics_retweets, t.metrics_replies,
-               i.type as interaction_type, i.timestamp as interaction_timestamp,
-               GROUP_CONCAT(DISTINCT COALESCE(m.local_path, m.url)) as media_urls,
-               GROUP_CONCAT(DISTINCT m.description) as media_descriptions
+               i.type as interaction_type, i.timestamp as interaction_timestamp
         FROM matching_tweets mt
         JOIN tweet t ON t.id = mt.id
         LEFT JOIN latest_interaction li ON li.tweet_id = t.id
         LEFT JOIN interaction i ON i.id = li.interaction_id
-        LEFT JOIN tweet_media tm ON tm.tweet_id = t.id
-        LEFT JOIN media m ON m.id = tm.media_id
     """
     params.extend([query, query])
     if interaction_type:
         sql += " WHERE i.type IS NOT NULL"
     sql += """
-        GROUP BY t.id
         ORDER BY t.created_at DESC
         LIMIT ?
     """
@@ -377,4 +407,5 @@ async def search_tweets(
     async with db.execute(sql, params) as cursor:
         rows = await cursor.fetchall()
         columns = [d[0] for d in cursor.description] if cursor.description else []
-        return [dict(zip(columns, row, strict=False)) for row in rows]
+        results = [dict(zip(columns, row, strict=False)) for row in rows]
+    return await _enrich_with_media(db, results)

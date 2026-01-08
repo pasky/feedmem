@@ -156,8 +156,8 @@ async def test_list_collapses_interaction_and_media(db: aiosqlite.Connection) ->
 
     results = await list_tweets(db)
     assert len(results) == 1
-    urls = (results[0]["media_urls"] or "").split(",")
-    assert set(urls) == {"https://example.com/1.jpg", "https://example.com/2.jpg"}
+    media_urls = {m.url for m in results[0]["media"]}
+    assert media_urls == {"https://example.com/1.jpg", "https://example.com/2.jpg"}
     assert results[0]["interaction_type"] == "bookmark"
 
     search_results = await search_tweets(db, "photo")
@@ -202,7 +202,8 @@ async def test_media_shared_across_tweets(db: aiosqlite.Connection) -> None:
     results = await list_tweets(db)
     assert len(results) == 2
     for r in results:
-        assert r["media_urls"] == "https://example.com/shared.jpg"
+        assert len(r["media"]) == 1
+        assert r["media"][0].url == "https://example.com/shared.jpg"
 
     async with db.execute("SELECT COUNT(*) FROM media") as cursor:
         row = await cursor.fetchone()

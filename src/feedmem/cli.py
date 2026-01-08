@@ -377,14 +377,13 @@ def _format_tweet(
 
     if r.get("reply_to_id") and not ref_type:
         lines.append(f"{indent}  ↩ Reply to: https://x.com/i/status/{r['reply_to_id']}")
-    if r.get("media_urls"):
-        lines.append(f"{indent}  Media: {r['media_urls']}")
-        if r.get("media_descriptions"):
-            desc = r["media_descriptions"]
+    for media in r.get("media", []):
+        lines.append(f"{indent}  Media: {media.url}")
+        if media.description:
+            desc = media.description
             if not verbose and len(desc) > 120:
                 desc = desc[:117] + "..."
-            desc_lines = desc.split("\n")
-            for desc_line in desc_lines:
+            for desc_line in desc.split("\n"):
                 lines.append(f"{indent}    │ {desc_line}")
     return "\n".join(lines)
 
