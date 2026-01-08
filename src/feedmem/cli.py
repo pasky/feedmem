@@ -455,22 +455,29 @@ def list_cmd(interaction_type: str | None, limit: int, verbose: bool) -> None:
 def search(query: str, interaction_type: str | None, limit: int, verbose: bool) -> None:
     """Search your archived tweets."""
 
-    async def run() -> list[db.SearchResult]:
+    async def run() -> list[str]:
         conn = await db.init_db()
         try:
-            return await db.search_tweets(
+            results = await db.search_tweets(
                 conn, query, interaction_type=interaction_type, limit=limit
             )
+            formatted: list[str] = []
+            for r in results:
+                formatted.append(await _format_with_refs(conn, r, verbose))
+            return formatted
         finally:
             await conn.close()
 
-    results = asyncio.run(run())
-    if not results:
+    formatted_tweets = asyncio.run(run())
+    if not formatted_tweets:
         click.echo("No results found.")
         return
 
-    for r in results:
-        click.echo(_format_tweet(r, verbose))
+    for tweet_str in formatted_tweets:
+        click.echo(
+            "--------------------------------------------------------------------------------"
+        )
+        click.echo(tweet_str)
         click.echo()
 
 
