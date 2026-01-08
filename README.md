@@ -2,7 +2,9 @@
 
 **Long-term memory for your social feeds.**
 
-Archive your Twitter/X activity (likes, bookmarks, tweets, replies, notifications) and search it later—by keyword now, semantically in the future.
+Archive your Twitter/X activity (likes, bookmarks, tweets, replies, notifications) and search it later, including contents of screenshots or memes.
+
+![Example search results](https://pbs.twimg.com/media/G-G63BcWkAAK7xa?format=png&name=large)
 
 ## Features
 
