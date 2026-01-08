@@ -359,12 +359,7 @@ def _format_tweet(
     created = r.get("created_at", "")
     content = r["content"] if verbose else r["content"][:256]
 
-    lines = [f"{indent}{prefix}@{handle}" + (f" ({name})" if name else "") + f" - {created}"]
-    content_lines = content.split("\n")
-    for content_line in content_lines:
-        lines.append(f"{indent}{content_line}")
-    lines.append(f"{indent}  https://x.com/{handle}/status/{r['id']}")
-
+    url = f"https://x.com/{handle}/status/{r['id']}"
     metrics: list[str] = []
     if r.get("metrics_likes") is not None:
         metrics.append(f"♥ {r['metrics_likes']}")
@@ -372,19 +367,28 @@ def _format_tweet(
         metrics.append(f"🔁 {r['metrics_retweets']}")
     if r.get("metrics_replies") is not None:
         metrics.append(f"💬 {r['metrics_replies']}")
-    if metrics:
-        lines.append(f"{indent}  {' | '.join(metrics)}")
+    metrics_str = " | ".join(metrics) if metrics else ""
+
+    header = f"{indent}{prefix}@{handle}" + (f" ({name})" if name else "") + f" - {created}"
+    header += f" | {url}"
+    if metrics_str:
+        header += f" | {metrics_str}"
+    lines = [header]
+
+    content_lines = content.split("\n")
+    for content_line in content_lines:
+        lines.append(f"{indent}{content_line}")
 
     if r.get("reply_to_id") and not ref_type:
         lines.append(f"{indent}  ↩ Reply to: https://x.com/i/status/{r['reply_to_id']}")
     for media in r.get("media", []):
-        lines.append(f"{indent}  Media: {media.url}")
+        lines.append(f"{indent}  ┌─ 📷 {media.url}")
         if media.description:
             desc = media.description
             if not verbose and len(desc) > 120:
                 desc = desc[:117] + "..."
             for desc_line in desc.split("\n"):
-                lines.append(f"{indent}    │ {desc_line}")
+                lines.append(f"{indent}  │ {desc_line}")
     return "\n".join(lines)
 
 
@@ -399,7 +403,7 @@ async def _format_with_refs(
     refs = [
         ("↩ reply to", r.get("reply_to_id")),
         ("🔁 retweet of", r.get("retweeted_id")),
-        ("💬 quoting", r.get("quoted_id")),
+        ("↪️ quoting", r.get("quoted_id")),
     ]
     for label, ref_id in refs:
         if ref_id:

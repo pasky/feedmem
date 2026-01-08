@@ -395,7 +395,8 @@ async def search_tweets(
         LEFT JOIN latest_interaction li ON li.tweet_id = t.id
         LEFT JOIN interaction i ON i.id = li.interaction_id
     """
-    params.extend([query, query])
+    fts_query = '"' + query.replace('"', '""') + '"'
+    params.extend([fts_query, query])
     if interaction_type:
         sql += " WHERE i.type IS NOT NULL"
     sql += """
