@@ -403,6 +403,11 @@ async def _format_with_refs(
     ]
     for label, ref_id in refs:
         if ref_id:
+            # Skip showing retweet ref for plain RTs (content is just "RT @handle: ...")
+            if label == "🔁 retweet of":
+                content = r.get("content", "")
+                if content.startswith("RT @"):
+                    continue
             ref_tweet = await db.get_tweet(conn, ref_id)
             if ref_tweet:
                 lines.append(f"  ┌─ {label}:")
