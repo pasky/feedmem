@@ -160,6 +160,10 @@ async def test_list_collapses_interaction_and_media(db: aiosqlite.Connection) ->
     assert set(urls) == {"https://example.com/1.jpg", "https://example.com/2.jpg"}
     assert results[0]["interaction_type"] == "bookmark"
 
+    search_results = await search_tweets(db, "photo")
+    assert len(search_results) == 1
+    assert set(search_results[0].keys()) == set(results[0].keys())
+
 
 @pytest.mark.asyncio
 async def test_media_shared_across_tweets(db: aiosqlite.Connection) -> None:

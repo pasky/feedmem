@@ -340,27 +340,38 @@ async def search_tweets(
             GROUP BY tweet_id
         ),
         matching_tweets AS (
-            SELECT t.id, t.author_handle, t.author_name, t.content, t.created_at
+            SELECT t.id
             FROM tweet_fts f
             JOIN tweet t ON t.rowid = f.rowid
             WHERE tweet_fts MATCH ?
             UNION
-            SELECT DISTINCT t.id, t.author_handle, t.author_name, t.content, t.created_at
+            SELECT DISTINCT t.id
             FROM tweet t
             JOIN tweet_media tm ON tm.tweet_id = t.id
             JOIN media m ON m.id = tm.media_id
             WHERE m.description LIKE '%' || ? || '%'
         )
-        SELECT mt.id, mt.author_handle, mt.author_name, mt.content, mt.created_at,
-               i.type as interaction_type, i.timestamp as interaction_timestamp
+        SELECT t.id, t.author_id, t.author_handle, t.author_name, t.content, t.created_at,
+               t.reply_to_id, t.quoted_id, t.retweeted_id,
+               t.metrics_likes, t.metrics_retweets, t.metrics_replies,
+               i.type as interaction_type, i.timestamp as interaction_timestamp,
+               GROUP_CONCAT(DISTINCT COALESCE(m.local_path, m.url)) as media_urls,
+               GROUP_CONCAT(DISTINCT m.description) as media_descriptions
         FROM matching_tweets mt
-        LEFT JOIN latest_interaction li ON li.tweet_id = mt.id
+        JOIN tweet t ON t.id = mt.id
+        LEFT JOIN latest_interaction li ON li.tweet_id = t.id
         LEFT JOIN interaction i ON i.id = li.interaction_id
+        LEFT JOIN tweet_media tm ON tm.tweet_id = t.id
+        LEFT JOIN media m ON m.id = tm.media_id
     """
     params.extend([query, query])
     if interaction_type:
         sql += " WHERE i.type IS NOT NULL"
-    sql += " ORDER BY mt.created_at DESC LIMIT ?"
+    sql += """
+        GROUP BY t.id
+        ORDER BY t.created_at DESC
+        LIMIT ?
+    """
     params.append(limit)
 
     async with db.execute(sql, params) as cursor:
