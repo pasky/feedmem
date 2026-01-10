@@ -32,6 +32,8 @@ uv sync --extra llm
 llm keys set openai  # or configure another provider
 ```
 
+**You may want to prefix all the `feedmem` commands below with `uv run`.**
+
 ## Quick Start
 
 ### Option A: Desktop machine (has display)
@@ -96,6 +98,9 @@ feedmem scrape likes --recursion 0         # Don't fetch referenced tweets (defa
 feedmem scrape likes --no-download-media   # Skip downloading images/videos (default: download)
 feedmem scrape likes --no-describe-media   # Skip LLM descriptions (default: on if llm installed)
 
+# Scrape updates continuously in 6 hour intervals
+feedmem scrape all --continuous -v
+
 # Import GDPR archive (your own tweets)
 # NOTE: This is untested (as X didn't send me my requested GDPR dump in 6 days and counting)
 feedmem ingest archive.zip --username yourhandle
@@ -104,7 +109,7 @@ feedmem ingest archive.zip --username yourhandle
 feedmem search "query"                     # Search all tweets
 feedmem search "query" --type like         # Only liked tweets
 feedmem search "query" --type bookmark     # Only bookmarks
-feedmem search "query" --limit 20          # Limit results
+feedmem search "query" -v --limit 20       # Limit results, but show each result in full
 ```
 
 ## Data Storage
