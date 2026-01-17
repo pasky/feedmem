@@ -54,11 +54,11 @@ class SearchTUI(App[None]):
         Binding("tab", "focus_next", "Switch pane", priority=True),
         Binding("enter", "open_url", "Open", priority=True),
         Binding("q", "quit", "Quit"),
+        Binding("ctrl+c", "quit", "Quit", priority=True, show=False),
         Binding("ctrl+d", "page_down", show=False),
         Binding("ctrl+u", "page_up", show=False),
         Binding("g", "go_top", show=False),
         Binding("G", "go_bottom", show=False),
-        Binding("ctrl+z", "suspend_process", show=False),
     ]
 
     def __init__(
