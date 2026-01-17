@@ -466,7 +466,7 @@ def search(query: str, interaction_type: str | None, limit: int, verbose: bool, 
     if tui:
         from feedmem.tui import run_tui
 
-        run_tui(query, interaction_type, limit, verbose)
+        run_tui(query, interaction_type, limit)
         return
 
     async def run() -> list[str]:

@@ -6,6 +6,7 @@ from typing import Any
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
+from textual.containers import ScrollableContainer
 from textual.widgets import Footer, ListItem, ListView, Static
 
 from feedmem import db
@@ -13,9 +14,26 @@ from feedmem import db
 
 class TweetList(ListView):
     BINDINGS = [
-        Binding("j", "cursor_down", "Down", show=False),
-        Binding("k", "cursor_up", "Up", show=False),
+        Binding("j", "cursor_down", "↓", show=False),
+        Binding("k", "cursor_up", "↑", show=False),
     ]
+
+
+class DetailView(ScrollableContainer):
+    BINDINGS = [
+        Binding("j", "scroll_down", "Scroll ↓", show=False),
+        Binding("k", "scroll_up", "Scroll ↑", show=False),
+        Binding("ctrl+d", "page_down", "Page ↓"),
+        Binding("ctrl+u", "page_up", "Page ↑"),
+        Binding("g", "scroll_home", "Top"),
+        Binding("G", "scroll_end", "Bottom", key_display="S-g"),
+    ]
+
+    def action_page_down(self) -> None:
+        self.scroll_page_down()
+
+    def action_page_up(self) -> None:
+        self.scroll_page_up()
 
 
 class SearchTUI(App[None]):
@@ -24,7 +42,6 @@ class SearchTUI(App[None]):
         background: #000000;
     }
     #results-list {
-        height: 1fr;
         border-bottom: solid $primary;
         background: #000000;
     }
@@ -35,8 +52,9 @@ class SearchTUI(App[None]):
         background: #222222;
     }
     #detail-view {
-        height: 2fr;
-        overflow-y: auto;
+        background: #000000;
+    }
+    #detail-content {
         background: #000000;
     }
     .tweet-item {
@@ -46,7 +64,8 @@ class SearchTUI(App[None]):
 
     BINDINGS = [
         Binding("q", "quit", "Quit"),
-        Binding("enter", "open_url", "Open in browser"),
+        Binding("enter", "open_url", "Open"),
+        Binding("tab", "focus_next", "Switch pane"),
     ]
 
     def __init__(
@@ -59,14 +78,17 @@ class SearchTUI(App[None]):
         self.format_fn = format_fn
 
     def compose(self) -> ComposeResult:
-        yield TweetList(
+        list_height = min(len(self.results), self.console.height // 2)
+        list_widget = TweetList(
             *[
                 ListItem(Static(self._one_liner(r), classes="tweet-item"), id=f"item-{i}")
                 for i, r in enumerate(self.results)
             ],
             id="results-list",
         )
-        yield Static("", id="detail-view")
+        list_widget.styles.height = list_height
+        yield list_widget
+        yield DetailView(Static("", id="detail-content"), id="detail-view")
         yield Footer()
 
     def _one_liner(self, r: db.SearchResult) -> str:
@@ -82,7 +104,8 @@ class SearchTUI(App[None]):
         idx = int(event.item.id.split("-")[1]) if event.item.id else 0
         if 0 <= idx < len(self.results):
             formatted = await self.format_fn(self.results[idx])
-            self.query_one("#detail-view", Static).update(formatted)
+            self.query_one("#detail-content", Static).update(formatted)
+            self.query_one("#detail-view", DetailView).scroll_home()
 
     def action_open_url(self) -> None:
         list_view = self.query_one("#results-list", TweetList)
@@ -103,7 +126,6 @@ async def run_search_tui(
     query: str,
     interaction_type: str | None = None,
     limit: int = 50,
-    verbose: bool = False,
 ) -> None:
     conn = await db.init_db()
     try:
@@ -129,6 +151,5 @@ def run_tui(
     query: str,
     interaction_type: str | None = None,
     limit: int = 50,
-    verbose: bool = False,
 ) -> None:
-    asyncio.run(run_search_tui(query, interaction_type, limit, verbose))
+    asyncio.run(run_search_tui(query, interaction_type, limit))
