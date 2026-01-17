@@ -71,7 +71,7 @@ class SearchTUI(App[None]):
         self.format_fn = format_fn
 
     def compose(self) -> ComposeResult:
-        list_height = min(len(self.results), self.console.height // 2)
+        list_height = min(len(self.results) + 1, self.console.height // 2)
         list_widget = TweetList(
             *[
                 ListItem(Static(self._one_liner(r), classes="tweet-item"), id=f"item-{i}")
