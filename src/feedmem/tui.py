@@ -20,20 +20,24 @@ class TweetList(ListView):
 
 class SearchTUI(App[None]):
     CSS = """
+    Screen {
+        background: #000000;
+    }
     #results-list {
         height: 1fr;
         border-bottom: solid $primary;
-        background: $background;
+        background: #000000;
     }
     #results-list > ListItem {
-        background: $background;
+        background: #000000;
     }
     #results-list > ListItem.-highlight {
-        background: $surface;
+        background: #222222;
     }
     #detail-view {
         height: 2fr;
         overflow-y: auto;
+        background: #000000;
     }
     .tweet-item {
         height: 1;
