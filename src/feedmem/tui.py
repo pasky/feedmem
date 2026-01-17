@@ -23,6 +23,13 @@ class SearchTUI(App[None]):
     #results-list {
         height: 1fr;
         border-bottom: solid $primary;
+        background: $background;
+    }
+    #results-list > ListItem {
+        background: $background;
+    }
+    #results-list > ListItem.-highlight {
+        background: $surface;
     }
     #detail-view {
         height: 2fr;
@@ -106,7 +113,7 @@ async def run_search_tui(
         async def format_fn(r: db.SearchResult) -> str:
             from feedmem.cli import format_with_refs
 
-            return await format_with_refs(conn, r, verbose)
+            return await format_with_refs(conn, r, verbose=True)
 
         app = SearchTUI(results, format_fn)
         await app.run_async()
