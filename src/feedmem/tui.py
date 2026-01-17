@@ -14,15 +14,17 @@ from feedmem import db
 
 class TweetList(ListView):
     BINDINGS = [
-        Binding("j", "cursor_down", "↓", show=False),
-        Binding("k", "cursor_up", "↑", show=False),
+        Binding("j", "cursor_down", "↓"),
+        Binding("k", "cursor_up", "↑"),
     ]
 
 
 class DetailView(ScrollableContainer):
+    can_focus = True
+
     BINDINGS = [
-        Binding("j", "scroll_down", "Scroll ↓", show=False),
-        Binding("k", "scroll_up", "Scroll ↑", show=False),
+        Binding("j", "scroll_down", "Scroll ↓"),
+        Binding("k", "scroll_up", "Scroll ↑"),
         Binding("ctrl+d", "page_down", "Page ↓"),
         Binding("ctrl+u", "page_up", "Page ↑"),
         Binding("g", "scroll_home", "Top"),
@@ -30,13 +32,27 @@ class DetailView(ScrollableContainer):
     ]
 
     def action_page_down(self) -> None:
-        self.scroll_page_down()
+        self.scroll_page_down(animate=False)
 
     def action_page_up(self) -> None:
-        self.scroll_page_up()
+        self.scroll_page_up(animate=False)
+
+    def action_scroll_home(self) -> None:
+        self.scroll_home(animate=False)
+
+    def action_scroll_end(self) -> None:
+        self.scroll_end(animate=False)
+
+    def action_scroll_down(self) -> None:
+        self.scroll_down(animate=False)
+
+    def action_scroll_up(self) -> None:
+        self.scroll_up(animate=False)
 
 
 class SearchTUI(App[None]):
+    ENABLE_COMMAND_PALETTE = False
+
     CSS = """
     Screen {
         background: #000000;
@@ -65,7 +81,8 @@ class SearchTUI(App[None]):
     BINDINGS = [
         Binding("q", "quit", "Quit"),
         Binding("enter", "open_url", "Open"),
-        Binding("tab", "focus_next", "Switch pane"),
+        Binding("tab", "focus_next", "Pane"),
+        Binding("ctrl+z", "suspend_process", "Suspend"),
     ]
 
     def __init__(
@@ -105,7 +122,7 @@ class SearchTUI(App[None]):
         if 0 <= idx < len(self.results):
             formatted = await self.format_fn(self.results[idx])
             self.query_one("#detail-content", Static).update(formatted)
-            self.query_one("#detail-view", DetailView).scroll_home()
+            self.query_one("#detail-view", DetailView).scroll_home(animate=False)
 
     def action_open_url(self) -> None:
         list_view = self.query_one("#results-list", TweetList)
@@ -142,7 +159,7 @@ async def run_search_tui(
             return await format_with_refs(conn, r, verbose=True)
 
         app = SearchTUI(results, format_fn)
-        await app.run_async()
+        await app.run_async(mouse=False)
     finally:
         await conn.close()
 
