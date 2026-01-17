@@ -13,41 +13,11 @@ from feedmem import db
 
 
 class TweetList(ListView):
-    BINDINGS = [
-        Binding("j", "cursor_down", "↓"),
-        Binding("k", "cursor_up", "↑"),
-    ]
+    pass
 
 
 class DetailView(ScrollableContainer):
     can_focus = True
-
-    BINDINGS = [
-        Binding("j", "scroll_down", "Scroll ↓"),
-        Binding("k", "scroll_up", "Scroll ↑"),
-        Binding("ctrl+d", "page_down", "Page ↓"),
-        Binding("ctrl+u", "page_up", "Page ↑"),
-        Binding("g", "scroll_home", "Top"),
-        Binding("G", "scroll_end", "Bottom", key_display="S-g"),
-    ]
-
-    def action_page_down(self) -> None:
-        self.scroll_page_down(animate=False)
-
-    def action_page_up(self) -> None:
-        self.scroll_page_up(animate=False)
-
-    def action_scroll_home(self) -> None:
-        self.scroll_home(animate=False)
-
-    def action_scroll_end(self) -> None:
-        self.scroll_end(animate=False)
-
-    def action_scroll_down(self) -> None:
-        self.scroll_down(animate=False)
-
-    def action_scroll_up(self) -> None:
-        self.scroll_up(animate=False)
 
 
 class SearchTUI(App[None]):
@@ -79,10 +49,16 @@ class SearchTUI(App[None]):
     """
 
     BINDINGS = [
+        Binding("j", "nav_down", "Down"),
+        Binding("k", "nav_up", "Up"),
+        Binding("tab", "focus_next", "Switch", priority=True),
+        Binding("enter", "open_url", "Open", priority=True),
         Binding("q", "quit", "Quit"),
-        Binding("enter", "open_url", "Open"),
-        Binding("tab", "focus_next", "Pane"),
-        Binding("ctrl+z", "suspend_process", "Suspend"),
+        Binding("ctrl+d", "page_down", show=False),
+        Binding("ctrl+u", "page_up", show=False),
+        Binding("g", "go_top", show=False),
+        Binding("G", "go_bottom", show=False),
+        Binding("ctrl+z", "suspend_process", show=False),
     ]
 
     def __init__(
@@ -123,6 +99,34 @@ class SearchTUI(App[None]):
             formatted = await self.format_fn(self.results[idx])
             self.query_one("#detail-content", Static).update(formatted)
             self.query_one("#detail-view", DetailView).scroll_home(animate=False)
+
+    def action_nav_down(self) -> None:
+        if isinstance(self.focused, TweetList):
+            self.focused.action_cursor_down()
+        elif isinstance(self.focused, DetailView):
+            self.focused.scroll_down(animate=False)
+
+    def action_nav_up(self) -> None:
+        if isinstance(self.focused, TweetList):
+            self.focused.action_cursor_up()
+        elif isinstance(self.focused, DetailView):
+            self.focused.scroll_up(animate=False)
+
+    def action_page_down(self) -> None:
+        if isinstance(self.focused, DetailView):
+            self.focused.scroll_page_down(animate=False)
+
+    def action_page_up(self) -> None:
+        if isinstance(self.focused, DetailView):
+            self.focused.scroll_page_up(animate=False)
+
+    def action_go_top(self) -> None:
+        if isinstance(self.focused, DetailView):
+            self.focused.scroll_home(animate=False)
+
+    def action_go_bottom(self) -> None:
+        if isinstance(self.focused, DetailView):
+            self.focused.scroll_end(animate=False)
 
     def action_open_url(self) -> None:
         list_view = self.query_one("#results-list", TweetList)
