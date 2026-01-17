@@ -51,7 +51,7 @@ class SearchTUI(App[None]):
     BINDINGS = [
         Binding("j", "nav_down", "Down"),
         Binding("k", "nav_up", "Up"),
-        Binding("tab", "focus_next", "Switch", priority=True),
+        Binding("tab", "focus_next", "Switch pane", priority=True),
         Binding("enter", "open_url", "Open", priority=True),
         Binding("q", "quit", "Quit"),
         Binding("ctrl+d", "page_down", show=False),
