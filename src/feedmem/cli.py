@@ -392,7 +392,7 @@ def _format_tweet(
     return "\n".join(lines)
 
 
-async def _format_with_refs(
+async def format_with_refs(
     conn: db.aiosqlite.Connection,
     r: db.SearchResult,
     verbose: bool,
@@ -435,7 +435,7 @@ def list_cmd(interaction_type: str | None, limit: int, verbose: bool) -> None:
             results = await db.list_tweets(conn, interaction_type=interaction_type, limit=limit)
             formatted: list[str] = []
             for r in results:
-                formatted.append(await _format_with_refs(conn, r, verbose))
+                formatted.append(await format_with_refs(conn, r, verbose))
             return formatted
         finally:
             await conn.close()
@@ -460,8 +460,14 @@ def list_cmd(interaction_type: str | None, limit: int, verbose: bool) -> None:
 )
 @click.option("--limit", default=50, help="Max results")
 @click.option("-v", "--verbose", is_flag=True, help="Show full tweet text")
-def search(query: str, interaction_type: str | None, limit: int, verbose: bool) -> None:
+@click.option("--tui", is_flag=True, help="Interactive TUI mode")
+def search(query: str, interaction_type: str | None, limit: int, verbose: bool, tui: bool) -> None:
     """Search your archived tweets."""
+    if tui:
+        from feedmem.tui import run_tui
+
+        run_tui(query, interaction_type, limit, verbose)
+        return
 
     async def run() -> list[str]:
         conn = await db.init_db()
@@ -471,7 +477,7 @@ def search(query: str, interaction_type: str | None, limit: int, verbose: bool) 
             )
             formatted: list[str] = []
             for r in results:
-                formatted.append(await _format_with_refs(conn, r, verbose))
+                formatted.append(await format_with_refs(conn, r, verbose))
             return formatted
         finally:
             await conn.close()
