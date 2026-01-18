@@ -97,7 +97,7 @@ class SearchTUI:
 
     def _make_list_item(self, idx: int, r: db.SearchResult) -> urwid.Widget:
         handle = r["author_handle"] or "?"
-        content = r["content"].replace("\n", " ")[:80]
+        content = r["content"].replace("\n", " ")
         itype = r.get("interaction_type", "")
         if itype:
             markup = [("itype", f"[{itype}] "), ("handle", f"@{handle}"), f": {content}"]
