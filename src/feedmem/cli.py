@@ -2,6 +2,7 @@
 
 import asyncio
 import random
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -460,10 +461,9 @@ def list_cmd(interaction_type: str | None, limit: int, verbose: bool) -> None:
 )
 @click.option("--limit", default=50, help="Max results")
 @click.option("-v", "--verbose", is_flag=True, help="Show full tweet text")
-@click.option("--tui", is_flag=True, help="Interactive TUI mode")
-def search(query: str, interaction_type: str | None, limit: int, verbose: bool, tui: bool) -> None:
+def search(query: str, interaction_type: str | None, limit: int, verbose: bool) -> None:
     """Search your archived tweets."""
-    if tui:
+    if sys.stdout.isatty():
         from feedmem.tui import run_tui
 
         run_tui(query, interaction_type, limit)

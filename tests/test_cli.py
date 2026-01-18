@@ -58,14 +58,6 @@ def test_search_no_results() -> None:
     assert "No results found" in result.output
 
 
-def test_search_tui_no_results() -> None:
-    runner = CliRunner()
-    with patch("feedmem.db.get_default_db_path", return_value=Path(":memory:")):
-        result = runner.invoke(main, ["search", "--tui", "nonexistent"])
-    assert result.exit_code == 0
-    assert "No results found" in result.output
-
-
 def test_search_with_results(tmp_path: Path) -> None:
     archive_path = tmp_path / "archive.zip"
     tweets_data = [
