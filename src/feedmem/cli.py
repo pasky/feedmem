@@ -29,13 +29,15 @@ def ingest(archive_path: Path, username: str, dry_run: bool, limit: int) -> None
         try:
             existing_ids = await db.get_tweet_ids(conn)
             results: dict[str, tuple[int, int]] = {}  # type -> (inserted, skipped)
-            count = 0
+            type_counts: dict[str, int] = {}  # per-type counter for limit
 
             for tweet in gdpr.iter_archive(archive_path):
                 itype = tweet.get("interaction_type", "own")
-                count += 1
-                if limit > 0 and count > limit:
-                    break
+
+                # Apply limit per type
+                type_counts[itype] = type_counts.get(itype, 0) + 1
+                if limit > 0 and type_counts[itype] > limit:
+                    continue
 
                 if itype not in results:
                     results[itype] = (0, 0)
