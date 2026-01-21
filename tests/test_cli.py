@@ -47,7 +47,8 @@ def test_ingest_command(tmp_path: Path) -> None:
     ):
         result = runner.invoke(main, ["ingest", str(archive_path), "--username", "testuser"])
     assert result.exit_code == 0
-    assert "Processed 1 tweets" in result.output
+    assert "1 own tweets" in result.output
+    assert "[+] [own] Test tweet" in result.output
     assert "1 inserted" in result.output
 
 
@@ -83,7 +84,7 @@ def test_ingest_dry_run(tmp_path: Path) -> None:
         )
     assert result.exit_code == 0
     assert "DRY RUN" in result.output
-    assert "2 new tweets" in result.output
+    assert "own: 2 inserted, 0 skipped" in result.output
 
 
 def test_ingest_limit(tmp_path: Path) -> None:
@@ -111,8 +112,8 @@ def test_ingest_limit(tmp_path: Path) -> None:
             main, ["ingest", str(archive_path), "--username", "testuser", "--limit", "3"]
         )
     assert result.exit_code == 0
-    assert "Processed 3 tweets" in result.output
-    assert "3 inserted" in result.output
+    assert "10 own tweets" in result.output  # Archive has 10, but we limit to 3
+    assert "own: 3 inserted" in result.output
 
 
 def test_ingest_skips_existing(tmp_path: Path) -> None:

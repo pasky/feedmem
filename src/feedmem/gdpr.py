@@ -3,12 +3,20 @@
 import json
 import re
 import zipfile
+from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from feedmem.scraper import parse_twitter_timestamp
 
 TweetData = dict[str, Any]
+
+
+@dataclass
+class ArchiveStats:
+    own_tweets: int = 0
+    likes: int = 0
 
 
 def parse_js_file(content: str) -> Any:
@@ -19,11 +27,10 @@ def parse_js_file(content: str) -> Any:
     raise ValueError("Could not parse JS file format")
 
 
-def parse_archive(archive_path: Path) -> list[TweetData]:
-    """Parse tweets from a Twitter GDPR archive zip."""
-    tweets: list[TweetData] = []
-
+def iter_archive(archive_path: Path) -> Iterator[TweetData]:
+    """Iterate over tweets from a Twitter GDPR archive zip (own tweets first, then likes)."""
     with zipfile.ZipFile(archive_path, "r") as zf:
+        # First: own tweets
         for name in zf.namelist():
             if name.endswith("tweets.js") or name.endswith("tweet.js"):
                 with zf.open(name) as f:
@@ -32,9 +39,41 @@ def parse_archive(archive_path: Path) -> list[TweetData]:
                     for item in data:
                         tweet = _parse_tweet(item.get("tweet", item))
                         if tweet:
-                            tweets.append(tweet)
+                            yield tweet
 
-    return tweets
+        # Second: likes (limited data - no author, no timestamp, truncated content)
+        for name in zf.namelist():
+            if name.endswith("like.js"):
+                with zf.open(name) as f:
+                    content = f.read().decode("utf-8")
+                    data = parse_js_file(content)
+                    for item in data:
+                        like = _parse_like(item.get("like", item))
+                        if like:
+                            yield like
+
+
+def get_archive_stats(archive_path: Path) -> ArchiveStats:
+    """Get counts of items in archive without fully parsing."""
+    stats = ArchiveStats()
+    with zipfile.ZipFile(archive_path, "r") as zf:
+        for name in zf.namelist():
+            if name.endswith("tweets.js") or name.endswith("tweet.js"):
+                with zf.open(name) as f:
+                    content = f.read().decode("utf-8")
+                    data = parse_js_file(content)
+                    stats.own_tweets = len(data)
+            elif name.endswith("like.js"):
+                with zf.open(name) as f:
+                    content = f.read().decode("utf-8")
+                    data = parse_js_file(content)
+                    stats.likes = len(data)
+    return stats
+
+
+def parse_archive(archive_path: Path) -> list[TweetData]:
+    """Parse tweets from a Twitter GDPR archive zip."""
+    return list(iter_archive(archive_path))
 
 
 def _parse_tweet(raw: dict[str, Any]) -> TweetData | None:
@@ -62,5 +101,27 @@ def _parse_tweet(raw: dict[str, Any]) -> TweetData | None:
             for m in raw.get("extended_entities", {}).get("media", [])
         ],
         "raw_json": json.dumps(raw),
-        "is_own_tweet": True,
+        "interaction_type": "own",
+    }
+
+
+def _parse_like(raw: dict[str, Any]) -> TweetData | None:
+    """Convert a like from GDPR format to our internal format.
+
+    Note: GDPR likes have very limited data - no author, no timestamp, truncated content.
+    """
+    tweet_id = raw.get("tweetId")
+    if not tweet_id:
+        return None
+
+    return {
+        "id": str(tweet_id),
+        "author_id": "",
+        "author_handle": "",
+        "author_name": "",
+        "content": raw.get("fullText", ""),  # Often truncated with "..." or "… https://..."
+        "created_at": "",  # Not available in GDPR likes
+        "media": [],
+        "raw_json": json.dumps(raw),
+        "interaction_type": "like",
     }

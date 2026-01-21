@@ -20,33 +20,49 @@ def main() -> None:
 @click.argument("archive_path", type=click.Path(exists=True, path_type=Path))
 @click.option("--username", required=True, help="Your Twitter username (for author info)")
 @click.option("--dry-run", is_flag=True, help="Parse and report stats without writing to DB")
-@click.option("--limit", default=0, help="Only process first N tweets (0=unlimited)")
-def ingest(archive_path: Path, username: str, dry_run: bool, limit: int) -> None:
+@click.option("--limit", default=0, help="Only process first N items (0=unlimited)")
+@click.option(
+    "--likes/--no-likes", default=False, help="Also ingest likes (limited data, no author/time)"
+)
+def ingest(archive_path: Path, username: str, dry_run: bool, limit: int, likes: bool) -> None:
     """Ingest tweets from a Twitter GDPR archive zip."""
 
-    async def run() -> tuple[int, int, int]:
+    async def run() -> dict[str, tuple[int, int]]:
         conn = await db.init_db()
         try:
-            tweets = gdpr.parse_archive(archive_path)
-            if limit > 0:
-                tweets = tweets[:limit]
+            existing_ids = await db.get_tweet_ids(conn)
+            results: dict[str, tuple[int, int]] = {}  # type -> (inserted, skipped)
+            count = 0
 
-            if dry_run:
-                # Gather stats without writing
-                existing_ids = await db.get_tweet_ids(conn)
-                new_count = sum(1 for t in tweets if t["id"] not in existing_ids)
-                overlap_count = len(tweets) - new_count
-                return len(tweets), new_count, overlap_count
+            for tweet in gdpr.iter_archive(archive_path):
+                itype = tweet.get("interaction_type", "own")
 
-            inserted = 0
-            skipped = 0
-            for tweet in tweets:
+                # Skip likes unless --likes flag
+                if itype == "like" and not likes:
+                    continue
+
+                count += 1
+                if limit > 0 and count > limit:
+                    break
+
+                if itype not in results:
+                    results[itype] = (0, 0)
+
+                if dry_run:
+                    is_new = tweet["id"] not in existing_ids
+                    ins, skip = results[itype]
+                    results[itype] = (ins + (1 if is_new else 0), skip + (0 if is_new else 1))
+                    continue
+
+                # For own tweets, use username; for likes, leave empty (unknown author)
+                author = username if itype == "own" else ""
+
                 was_new = await db.insert_tweet_if_missing(
                     conn,
                     id=tweet["id"],
-                    author_id=username,
-                    author_handle=username,
-                    author_name=username,
+                    author_id=author,
+                    author_handle=author,
+                    author_name=author,
                     content=tweet["content"],
                     created_at=tweet["created_at"],
                     reply_to_id=tweet.get("reply_to_id"),
@@ -54,17 +70,21 @@ def ingest(archive_path: Path, username: str, dry_run: bool, limit: int) -> None
                     metrics_retweets=tweet.get("metrics_retweets"),
                     raw_json=tweet.get("raw_json"),
                 )
+
+                ins, skip = results[itype]
                 if was_new:
-                    inserted += 1
-                    # Only add interaction for new tweets
+                    results[itype] = (ins + 1, skip)
+                    click.echo(f"  [+] [{itype}] {tweet['content'][:60]}...")
                     await db.add_interaction(
                         conn,
-                        type="own",
+                        type=itype,
                         tweet_id=tweet["id"],
-                        timestamp=tweet["created_at"],
+                        timestamp=tweet["created_at"] or datetime.now().isoformat(),
                     )
                 else:
-                    skipped += 1
+                    results[itype] = (ins, skip + 1)
+                    click.echo(f"  [=] [{itype}] {tweet['content'][:60]}...")
+
                 for media in tweet.get("media", []):
                     if media.get("id"):
                         await db.add_media(
@@ -74,19 +94,27 @@ def ingest(archive_path: Path, username: str, dry_run: bool, limit: int) -> None
                             url=media["url"],
                             mime_type=media.get("type"),
                         )
-            return len(tweets), inserted, skipped
+
+            return results
         finally:
             await conn.close()
 
-    total, new_or_inserted, overlap_or_skipped = asyncio.run(run())
+    # Show archive stats first
+    stats = gdpr.get_archive_stats(archive_path)
+    click.echo(f"Archive contains: {stats.own_tweets} own tweets, {stats.likes} likes")
+    if not likes:
+        click.echo("(use --likes to also ingest likes)")
+
+    results = asyncio.run(run())
+
     if dry_run:
-        click.echo(f"DRY RUN: Would process {total} tweets from archive")
-        click.echo(f"  - {new_or_inserted} new tweets (not in DB)")
-        click.echo(f"  - {overlap_or_skipped} already exist (would be skipped)")
+        click.echo("DRY RUN results:")
     else:
-        click.echo(f"Processed {total} tweets from archive")
-        click.echo(f"  - {new_or_inserted} inserted")
-        click.echo(f"  - {overlap_or_skipped} skipped (already existed)")
+        click.echo("Ingestion complete:")
+
+    for itype, (inserted, skipped) in results.items():
+        total = inserted + skipped
+        click.echo(f"  {itype}: {inserted} inserted, {skipped} skipped (of {total})")
 
 
 @main.command("login")
