@@ -130,6 +130,54 @@ async def _migrate(db: aiosqlite.Connection) -> None:
         await db.execute("ALTER TABLE media RENAME COLUMN extracted_text TO description")
 
 
+async def insert_tweet_if_missing(
+    db: aiosqlite.Connection,
+    *,
+    id: str,
+    author_id: str,
+    author_handle: str,
+    content: str,
+    created_at: str,
+    author_name: str | None = None,
+    reply_to_id: str | None = None,
+    quoted_id: str | None = None,
+    retweeted_id: str | None = None,
+    thread_id: str | None = None,
+    metrics_likes: int | None = None,
+    metrics_retweets: int | None = None,
+    metrics_replies: int | None = None,
+    raw_json: str | None = None,
+) -> bool:
+    """Insert tweet only if it doesn't exist. Returns True if inserted, False if skipped."""
+    cursor = await db.execute(
+        """
+        INSERT INTO tweet (id, author_id, author_handle, author_name, content, created_at,
+                          reply_to_id, quoted_id, retweeted_id, thread_id,
+                          metrics_likes, metrics_retweets, metrics_replies, raw_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO NOTHING
+        """,
+        (
+            id,
+            author_id,
+            author_handle,
+            author_name,
+            content,
+            created_at,
+            reply_to_id,
+            quoted_id,
+            retweeted_id,
+            thread_id,
+            metrics_likes,
+            metrics_retweets,
+            metrics_replies,
+            raw_json,
+        ),
+    )
+    await db.commit()
+    return cursor.rowcount > 0
+
+
 async def upsert_tweet(
     db: aiosqlite.Connection,
     *,

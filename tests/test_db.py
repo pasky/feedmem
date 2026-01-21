@@ -11,6 +11,7 @@ from feedmem.db import (
     add_interaction,
     add_media,
     init_db,
+    insert_tweet_if_missing,
     list_tweets,
     search_tweets,
     upsert_tweet,
@@ -96,6 +97,64 @@ async def test_upsert_updates_existing(db: aiosqlite.Connection) -> None:
     results = await search_tweets(db, "updated")
     assert len(results) == 1
     assert "updated" in results[0]["content"]
+
+
+@pytest.mark.asyncio
+async def test_insert_if_missing_skips_existing(db: aiosqlite.Connection) -> None:
+    """insert_tweet_if_missing should not modify existing tweets."""
+    # First insert via regular upsert (simulating scraped tweet with rich data)
+    await upsert_tweet(
+        db,
+        id="existing",
+        author_id="rich_author_id",
+        author_handle="rich_handle",
+        author_name="Rich Name",
+        content="rich content with details",
+        created_at="2024-01-01T00:00:00Z",
+        metrics_likes=100,
+        raw_json='{"detailed": true}',
+    )
+
+    # Try to insert same ID via if_missing (simulating GDPR with sparse data)
+    was_new = await insert_tweet_if_missing(
+        db,
+        id="existing",
+        author_id="sparse_id",
+        author_handle="sparse_handle",
+        author_name="Sparse",
+        content="sparse content",
+        created_at="2024-01-01T00:00:00Z",
+        metrics_likes=0,
+        raw_json='{"sparse": true}',
+    )
+
+    assert was_new is False
+
+    # Verify original data preserved
+    results = await search_tweets(db, "rich")
+    assert len(results) == 1
+    assert results[0]["author_handle"] == "rich_handle"
+    assert results[0]["content"] == "rich content with details"
+    assert results[0]["metrics_likes"] == 100
+
+
+@pytest.mark.asyncio
+async def test_insert_if_missing_inserts_new(db: aiosqlite.Connection) -> None:
+    """insert_tweet_if_missing should insert new tweets."""
+    was_new = await insert_tweet_if_missing(
+        db,
+        id="brand_new",
+        author_id="new_author",
+        author_handle="newuser",
+        content="completely new tweet",
+        created_at="2024-01-01T00:00:00Z",
+    )
+
+    assert was_new is True
+
+    results = await search_tweets(db, "completely")
+    assert len(results) == 1
+    assert results[0]["author_handle"] == "newuser"
 
 
 @pytest.mark.asyncio

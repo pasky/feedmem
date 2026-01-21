@@ -19,15 +19,29 @@ def main() -> None:
 @main.command()
 @click.argument("archive_path", type=click.Path(exists=True, path_type=Path))
 @click.option("--username", required=True, help="Your Twitter username (for author info)")
-def ingest(archive_path: Path, username: str) -> None:
+@click.option("--dry-run", is_flag=True, help="Parse and report stats without writing to DB")
+@click.option("--limit", default=0, help="Only process first N tweets (0=unlimited)")
+def ingest(archive_path: Path, username: str, dry_run: bool, limit: int) -> None:
     """Ingest tweets from a Twitter GDPR archive zip."""
 
-    async def run() -> int:
+    async def run() -> tuple[int, int, int]:
         conn = await db.init_db()
         try:
             tweets = gdpr.parse_archive(archive_path)
+            if limit > 0:
+                tweets = tweets[:limit]
+
+            if dry_run:
+                # Gather stats without writing
+                existing_ids = await db.get_tweet_ids(conn)
+                new_count = sum(1 for t in tweets if t["id"] not in existing_ids)
+                overlap_count = len(tweets) - new_count
+                return len(tweets), new_count, overlap_count
+
+            inserted = 0
+            skipped = 0
             for tweet in tweets:
-                await db.upsert_tweet(
+                was_new = await db.insert_tweet_if_missing(
                     conn,
                     id=tweet["id"],
                     author_id=username,
@@ -40,6 +54,17 @@ def ingest(archive_path: Path, username: str) -> None:
                     metrics_retweets=tweet.get("metrics_retweets"),
                     raw_json=tweet.get("raw_json"),
                 )
+                if was_new:
+                    inserted += 1
+                    # Only add interaction for new tweets
+                    await db.add_interaction(
+                        conn,
+                        type="own",
+                        tweet_id=tweet["id"],
+                        timestamp=tweet["created_at"],
+                    )
+                else:
+                    skipped += 1
                 for media in tweet.get("media", []):
                     if media.get("id"):
                         await db.add_media(
@@ -49,12 +74,19 @@ def ingest(archive_path: Path, username: str) -> None:
                             url=media["url"],
                             mime_type=media.get("type"),
                         )
-            return len(tweets)
+            return len(tweets), inserted, skipped
         finally:
             await conn.close()
 
-    count = asyncio.run(run())
-    click.echo(f"Ingested {count} tweets from archive")
+    total, new_or_inserted, overlap_or_skipped = asyncio.run(run())
+    if dry_run:
+        click.echo(f"DRY RUN: Would process {total} tweets from archive")
+        click.echo(f"  - {new_or_inserted} new tweets (not in DB)")
+        click.echo(f"  - {overlap_or_skipped} already exist (would be skipped)")
+    else:
+        click.echo(f"Processed {total} tweets from archive")
+        click.echo(f"  - {new_or_inserted} inserted")
+        click.echo(f"  - {overlap_or_skipped} skipped (already existed)")
 
 
 @main.command("login")
