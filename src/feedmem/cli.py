@@ -21,11 +21,8 @@ def main() -> None:
 @click.option("--username", required=True, help="Your Twitter username (for author info)")
 @click.option("--dry-run", is_flag=True, help="Parse and report stats without writing to DB")
 @click.option("--limit", default=0, help="Only process first N items (0=unlimited)")
-@click.option(
-    "--likes/--no-likes", default=False, help="Also ingest likes (limited data, no author/time)"
-)
-def ingest(archive_path: Path, username: str, dry_run: bool, limit: int, likes: bool) -> None:
-    """Ingest tweets from a Twitter GDPR archive zip."""
+def ingest(archive_path: Path, username: str, dry_run: bool, limit: int) -> None:
+    """Ingest tweets and likes from a Twitter GDPR archive zip."""
 
     async def run() -> dict[str, tuple[int, int]]:
         conn = await db.init_db()
@@ -36,11 +33,6 @@ def ingest(archive_path: Path, username: str, dry_run: bool, limit: int, likes: 
 
             for tweet in gdpr.iter_archive(archive_path):
                 itype = tweet.get("interaction_type", "own")
-
-                # Skip likes unless --likes flag
-                if itype == "like" and not likes:
-                    continue
-
                 count += 1
                 if limit > 0 and count > limit:
                     break
@@ -102,8 +94,6 @@ def ingest(archive_path: Path, username: str, dry_run: bool, limit: int, likes: 
     # Show archive stats first
     stats = gdpr.get_archive_stats(archive_path)
     click.echo(f"Archive contains: {stats.own_tweets} own tweets, {stats.likes} likes")
-    if not likes:
-        click.echo("(use --likes to also ingest likes)")
 
     results = asyncio.run(run())
 
