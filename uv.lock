@@ -189,6 +189,7 @@ llm = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "feedmem", extra = ["llm"] },
     { name = "pre-commit" },
     { name = "pyright" },
     { name = "pytest" },
@@ -209,6 +210,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "feedmem", extras = ["llm"] },
     { name = "pre-commit", specifier = ">=4.2.0" },
     { name = "pyright", specifier = ">=1.1.407" },
     { name = "pytest", specifier = ">=9.0.2" },
