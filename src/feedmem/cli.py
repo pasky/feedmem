@@ -516,8 +516,8 @@ def list_cmd(interaction_type: str | None, limit: int, verbose: bool) -> None:
 def search(query: str, interaction_type: str | None, limit: int, verbose: bool) -> None:
     """Search your archived tweets.
 
-    QUERY is matched as an exact phrase against tweet content, author handle/name,
-    and media descriptions.
+    QUERY uses SQLite FTS5 syntax: word1 word2 (AND), word1 OR word2, "exact phrase",
+    word* (prefix), NOT word, author_handle:foo (column filter).
     """
     if sys.stdout.isatty():
         from feedmem.tui import run_tui
