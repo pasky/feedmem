@@ -514,7 +514,11 @@ def list_cmd(interaction_type: str | None, limit: int, verbose: bool) -> None:
 @click.option("--limit", default=50, help="Max results")
 @click.option("-v", "--verbose", is_flag=True, help="Show full tweet text")
 def search(query: str, interaction_type: str | None, limit: int, verbose: bool) -> None:
-    """Search your archived tweets."""
+    """Search your archived tweets.
+
+    QUERY is matched as an exact phrase against tweet content, author handle/name,
+    and media descriptions.
+    """
     if sys.stdout.isatty():
         from feedmem.tui import run_tui
 
