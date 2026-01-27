@@ -43,6 +43,36 @@ async def test_upsert_and_search(db: aiosqlite.Connection) -> None:
     assert results[0]["author_handle"] == "testuser"
     assert results[0]["interaction_type"] == "like"
 
+    await upsert_tweet(
+        db,
+        id="q1",
+        author_id="u1",
+        author_handle="quotee",
+        content="shared wisdom",
+        created_at="2024-01-10T10:00:00Z",
+    )
+    await upsert_tweet(
+        db,
+        id="q2",
+        author_id="u2",
+        author_handle="quoter",
+        content="my take",
+        created_at="2024-01-11T10:00:00Z",
+        quoted_id="q1",
+    )
+    await upsert_tweet(
+        db,
+        id="q3",
+        author_id="u3",
+        author_handle="recursive",
+        content="second layer",
+        created_at="2024-01-12T10:00:00Z",
+        quoted_id="q2",
+    )
+
+    quote_results = await search_tweets(db, "wisdom")
+    assert [r["id"] for r in quote_results] == ["q3", "q2", "q1"]
+
 
 @pytest.mark.asyncio
 async def test_search_by_interaction_type(db: aiosqlite.Connection) -> None:

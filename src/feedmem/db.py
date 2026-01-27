@@ -411,7 +411,7 @@ async def search_tweets(
     limit: int = 50,
 ) -> list[SearchResult]:
     sql = """
-        WITH latest_interaction AS (
+        WITH RECURSIVE latest_interaction AS (
             SELECT tweet_id, MAX(id) AS interaction_id
             FROM interaction
     """
@@ -422,7 +422,7 @@ async def search_tweets(
     sql += """
             GROUP BY tweet_id
         ),
-        matching_tweets AS (
+        matching_base AS (
             SELECT t.id
             FROM tweet_fts f
             JOIN tweet t ON t.rowid = f.rowid
@@ -433,6 +433,16 @@ async def search_tweets(
             JOIN tweet_media tm ON tm.tweet_id = t.id
             JOIN media m ON m.id = tm.media_id
             WHERE m.description LIKE '%' || ? || '%'
+        ),
+        matching_tweets(id) AS (
+            SELECT id FROM matching_base
+            UNION
+            SELECT t.id
+            FROM tweet t
+            JOIN matching_tweets mt
+                ON t.reply_to_id = mt.id
+                OR t.quoted_id = mt.id
+                OR t.retweeted_id = mt.id
         )
         SELECT t.id, t.author_id, t.author_handle, t.author_name, t.content, t.created_at,
                t.reply_to_id, t.quoted_id, t.retweeted_id,
