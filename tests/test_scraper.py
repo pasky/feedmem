@@ -187,6 +187,33 @@ def test_parse_tweet_from_graphql_conversation_thread() -> None:
                             "tweet_results": {
                                 "result": {
                                     "__typename": "Tweet",
+                                    "rest_id": "parent456",
+                                    "legacy": {
+                                        "full_text": "Parent in thread",
+                                        "created_at": "Fri Jan 19 13:55:00 +0000 2024",
+                                    },
+                                    "core": {
+                                        "user_results": {
+                                            "result": {
+                                                "rest_id": "parentuser",
+                                                "legacy": {
+                                                    "screen_name": "parentuser",
+                                                    "name": "Parent User",
+                                                },
+                                            }
+                                        }
+                                    },
+                                }
+                            }
+                        }
+                    }
+                },
+                {
+                    "item": {
+                        "itemContent": {
+                            "tweet_results": {
+                                "result": {
+                                    "__typename": "Tweet",
                                     "rest_id": "thread123",
                                     "legacy": {
                                         "full_text": "Reply in thread",
@@ -208,7 +235,7 @@ def test_parse_tweet_from_graphql_conversation_thread() -> None:
                             }
                         }
                     }
-                }
+                },
             ]
         }
     }

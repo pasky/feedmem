@@ -185,6 +185,26 @@ def _extract_tweet_result(result: dict[str, Any]) -> TweetData | None:
     }
 
 
+def _extract_tweet_from_items(items: list[dict[str, Any]]) -> TweetData | None:
+    """Select the most relevant tweet from a conversation thread."""
+    tweets: list[TweetData] = []
+    for item in items:
+        item_content = item.get("item", {}).get("itemContent") or item.get("itemContent")
+        if not item_content:
+            continue
+        tweet_results = item_content.get("tweet_results", {})
+        result = tweet_results.get("result", {})
+        tweet = _extract_tweet_result(result)
+        if tweet:
+            tweets.append(tweet)
+
+    if not tweets:
+        return None
+
+    reply_tweets = [tweet for tweet in tweets if tweet.get("reply_to_id")]
+    return reply_tweets[0] if reply_tweets else tweets[0]
+
+
 def parse_tweet_from_graphql(entry: dict[str, Any]) -> TweetData | None:
     """Extract tweet data from Twitter's GraphQL response format."""
     try:
@@ -193,9 +213,7 @@ def parse_tweet_from_graphql(entry: dict[str, Any]) -> TweetData | None:
 
         # Handle conversation thread entries (replies appear this way)
         if item_content is None and "items" in content:
-            items = content.get("items", [])
-            if items:
-                item_content = items[0].get("item", {}).get("itemContent", {})
+            return _extract_tweet_from_items(content.get("items", []))
 
         if not item_content:
             return None
