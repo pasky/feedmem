@@ -78,9 +78,36 @@ CREATE TRIGGER IF NOT EXISTS tweet_au AFTER UPDATE ON tweet BEGIN
     VALUES (NEW.rowid, NEW.content, NEW.author_handle, NEW.author_name);
 END;
 
+-- FTS5 for media descriptions
+CREATE VIRTUAL TABLE IF NOT EXISTS media_fts USING fts5(
+    description,
+    content='media',
+    content_rowid='rowid'
+);
+
+CREATE TRIGGER IF NOT EXISTS media_ai AFTER INSERT ON media BEGIN
+    INSERT INTO media_fts(rowid, description)
+    VALUES (NEW.rowid, NEW.description);
+END;
+
+CREATE TRIGGER IF NOT EXISTS media_ad AFTER DELETE ON media BEGIN
+    INSERT INTO media_fts(media_fts, rowid, description)
+    VALUES ('delete', OLD.rowid, OLD.description);
+END;
+
+CREATE TRIGGER IF NOT EXISTS media_au AFTER UPDATE ON media BEGIN
+    INSERT INTO media_fts(media_fts, rowid, description)
+    VALUES ('delete', OLD.rowid, OLD.description);
+    INSERT INTO media_fts(rowid, description)
+    VALUES (NEW.rowid, NEW.description);
+END;
+
 -- Indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_tweet_author ON tweet(author_handle);
 CREATE INDEX IF NOT EXISTS idx_tweet_created ON tweet(created_at);
+CREATE INDEX IF NOT EXISTS idx_tweet_reply_to ON tweet(reply_to_id);
+CREATE INDEX IF NOT EXISTS idx_tweet_quoted ON tweet(quoted_id);
+CREATE INDEX IF NOT EXISTS idx_tweet_retweeted ON tweet(retweeted_id);
 CREATE INDEX IF NOT EXISTS idx_interaction_type ON interaction(type);
 CREATE INDEX IF NOT EXISTS idx_interaction_tweet ON interaction(tweet_id);
 CREATE INDEX IF NOT EXISTS idx_tweet_media_tweet ON tweet_media(tweet_id);
@@ -128,6 +155,20 @@ async def _migrate(db: aiosqlite.Connection) -> None:
 
     if "extracted_text" in media_columns:
         await db.execute("ALTER TABLE media RENAME COLUMN extracted_text TO description")
+
+    # Populate media_fts if empty but media has data
+    async with db.execute("SELECT COUNT(*) FROM media_fts") as cursor:
+        media_fts_count = (await cursor.fetchone())[0]  # type: ignore[index]
+    if media_fts_count == 0:
+        async with db.execute("SELECT COUNT(*) FROM media") as cursor:
+            media_count = (await cursor.fetchone())[0]  # type: ignore[index]
+        if media_count > 0:
+            await db.execute(
+                """
+                INSERT INTO media_fts(rowid, description)
+                SELECT rowid, description FROM media WHERE description IS NOT NULL
+                """
+            )
 
 
 async def insert_tweet_if_missing(
@@ -411,18 +452,7 @@ async def search_tweets(
     limit: int = 50,
 ) -> list[SearchResult]:
     sql = """
-        WITH RECURSIVE latest_interaction AS (
-            SELECT tweet_id, MAX(id) AS interaction_id
-            FROM interaction
-    """
-    params: list[str | int] = []
-    if interaction_type:
-        sql += " WHERE type = ?"
-        params.append(interaction_type)
-    sql += """
-            GROUP BY tweet_id
-        ),
-        matching_base AS (
+        WITH RECURSIVE matching_base AS (
             SELECT t.id
             FROM tweet_fts f
             JOIN tweet t ON t.rowid = f.rowid
@@ -432,7 +462,8 @@ async def search_tweets(
             FROM tweet t
             JOIN tweet_media tm ON tm.tweet_id = t.id
             JOIN media m ON m.id = tm.media_id
-            WHERE m.description LIKE '%' || ? || '%'
+            JOIN media_fts mf ON mf.rowid = m.rowid
+            WHERE media_fts MATCH ?
         ),
         matching_tweets(id) AS (
             SELECT id FROM matching_base
@@ -450,10 +481,18 @@ async def search_tweets(
                i.type as interaction_type, i.timestamp as interaction_timestamp
         FROM matching_tweets mt
         JOIN tweet t ON t.id = mt.id
-        LEFT JOIN latest_interaction li ON li.tweet_id = t.id
-        LEFT JOIN interaction i ON i.id = li.interaction_id
+        LEFT JOIN interaction i ON i.id = (
+            SELECT id FROM interaction
+            WHERE tweet_id = t.id
     """
-    params.extend([query, query])
+    params: list[str | int] = [query, query]
+    if interaction_type:
+        sql += " AND type = ?"
+        params.append(interaction_type)
+    sql += """
+            ORDER BY id DESC LIMIT 1
+        )
+    """
     if interaction_type:
         sql += " WHERE i.type IS NOT NULL"
     sql += """
