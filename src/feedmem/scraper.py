@@ -102,6 +102,25 @@ def has_auth_state() -> bool:
     return AUTH_STATE_PATH.exists()
 
 
+async def check_auth(headless: bool = True) -> str:
+    """Verify the saved auth state works; return the logged-in username.
+
+    Raises RuntimeError if not logged in, or PlaywrightError on timeout
+    (session expired / invalid).
+    """
+    if not has_auth_state():
+        raise RuntimeError("Not logged in. Run 'feedmem login' first.")
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=headless)
+        context = await browser.new_context(storage_state=str(AUTH_STATE_PATH))
+        page = await context.new_page()
+        try:
+            return await _get_username(page)
+        finally:
+            await browser.close()
+
+
 TweetData = dict[str, Any]
 
 

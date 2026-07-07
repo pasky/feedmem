@@ -3,7 +3,7 @@
 import json
 import zipfile
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from click.testing import CliRunner
@@ -23,6 +23,37 @@ def test_login_show_path() -> None:
     result = runner.invoke(main, ["login", "--show-path"])
     assert result.exit_code == 0
     assert "auth_state.json" in result.output
+
+
+def test_whoami_ok() -> None:
+    runner = CliRunner()
+    with patch("feedmem.cli.scraper.check_auth", new=AsyncMock(return_value="xpasky")) as mock:
+        result = runner.invoke(main, ["whoami"])
+    mock.assert_called_once()
+    assert result.exit_code == 0
+    assert "@xpasky" in result.output
+
+
+def test_whoami_expired() -> None:
+    from playwright.async_api import Error as PlaywrightError
+
+    runner = CliRunner()
+    with patch(
+        "feedmem.cli.scraper.check_auth", side_effect=PlaywrightError("Timeout 15000ms exceeded")
+    ):
+        result = runner.invoke(main, ["whoami"])
+    assert result.exit_code == 1
+    assert "expired" in result.output.lower()
+
+
+def test_whoami_not_logged_in() -> None:
+    runner = CliRunner()
+    with patch(
+        "feedmem.cli.scraper.check_auth", side_effect=RuntimeError("Not logged in. Run ...")
+    ):
+        result = runner.invoke(main, ["whoami"])
+    assert result.exit_code == 1
+    assert "Not logged in" in result.output
 
 
 def test_ingest_command(tmp_path: Path) -> None:

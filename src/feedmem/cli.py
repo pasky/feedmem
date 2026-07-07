@@ -129,6 +129,23 @@ def login_cmd(show_path: bool, cookies_file: Path | None) -> None:
     asyncio.run(scraper.login_interactive())
 
 
+@main.command()
+@click.option("--no-headless", is_flag=True, help="Show browser window")
+def whoami(no_headless: bool) -> None:
+    """Check that the saved auth state is valid and show the logged-in user."""
+    from playwright.async_api import Error as PlaywrightError
+
+    try:
+        user = asyncio.run(scraper.check_auth(headless=not no_headless))
+    except PlaywrightError:
+        click.echo("Auth INVALID -- session expired. Run 'feedmem login' to re-authenticate.")
+        sys.exit(1)
+    except RuntimeError as e:
+        click.echo(str(e))
+        sys.exit(1)
+    click.echo(f"Auth OK -- logged in as @{user}")
+
+
 INTERACTION_TYPES = {
     "likes": "like",
     "bookmarks": "bookmark",
