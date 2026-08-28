@@ -83,6 +83,38 @@ async def test_upsert_and_search(db: aiosqlite.Connection) -> None:
 
 
 @pytest.mark.asyncio
+async def test_pagination_is_stable_with_tied_timestamps(db: aiosqlite.Connection) -> None:
+    """Same-timestamp rows must not be skipped/duplicated across LIMIT/OFFSET pages."""
+    ids = [f"t{i}" for i in range(6)]
+    for tid in ids:
+        await upsert_tweet(
+            db,
+            id=tid,
+            author_id="u1",
+            author_handle="tied",
+            content="paginate me please",
+            created_at="2024-01-15T10:00:00Z",  # all identical
+        )
+        await add_interaction(db, type="like", tweet_id=tid, timestamp="2024-01-15T12:00:00Z")
+
+    # inserted in ascending id order, so a missing tiebreaker yields insertion/rowid order
+    expected = sorted(ids, reverse=True)
+    full = [r["id"] for r in await search_tweets(db, "paginate")]
+    assert full == expected
+    paged: list[str] = []
+    for offset in range(0, 6, 2):
+        paged += [r["id"] for r in await search_tweets(db, "paginate", limit=2, offset=offset)]
+    assert paged == full
+
+    full_list = [r["id"] for r in await list_tweets(db)]
+    assert full_list == expected
+    paged_list: list[str] = []
+    for offset in range(0, 6, 2):
+        paged_list += [r["id"] for r in await list_tweets(db, limit=2, offset=offset)]
+    assert paged_list == full_list
+
+
+@pytest.mark.asyncio
 async def test_search_by_interaction_type(db: aiosqlite.Connection) -> None:
     await upsert_tweet(
         db,

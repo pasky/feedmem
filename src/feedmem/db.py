@@ -414,7 +414,7 @@ async def list_tweets(
     if interaction_type:
         sql += " WHERE i.type IS NOT NULL"
     sql += """
-        ORDER BY COALESCE(i.timestamp, t.created_at) DESC
+        ORDER BY COALESCE(i.timestamp, t.created_at) DESC, t.id DESC
         LIMIT ? OFFSET ?
     """
     params.append(limit)
@@ -499,7 +499,7 @@ async def search_tweets(
     if interaction_type:
         sql += " WHERE i.type IS NOT NULL"
     sql += """
-        ORDER BY t.created_at DESC
+        ORDER BY t.created_at DESC, t.id DESC
         LIMIT ? OFFSET ?
     """
     params.append(limit)
