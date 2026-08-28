@@ -73,6 +73,14 @@ async def test_upsert_and_search(db: aiosqlite.Connection) -> None:
     quote_results = await search_tweets(db, "wisdom")
     assert [r["id"] for r in quote_results] == ["q3", "q2", "q1"]
 
+    # pagination: limit + offset walk the same ordering
+    page1 = await search_tweets(db, "wisdom", limit=2)
+    page2 = await search_tweets(db, "wisdom", limit=2, offset=2)
+    page3 = await search_tweets(db, "wisdom", limit=2, offset=4)
+    assert [r["id"] for r in page1] == ["q3", "q2"]
+    assert [r["id"] for r in page2] == ["q1"]
+    assert page3 == []
+
 
 @pytest.mark.asyncio
 async def test_search_by_interaction_type(db: aiosqlite.Connection) -> None:
@@ -290,6 +298,9 @@ async def test_media_shared_across_tweets(db: aiosqlite.Connection) -> None:
 
     results = await list_tweets(db)
     assert len(results) == 2
+    assert [r["id"] for r in await list_tweets(db, limit=1)] == [results[0]["id"]]
+    assert [r["id"] for r in await list_tweets(db, limit=1, offset=1)] == [results[1]["id"]]
+    assert await list_tweets(db, limit=1, offset=2) == []
     for r in results:
         assert len(r["media"]) == 1
         assert r["media"][0].url == "https://example.com/shared.jpg"

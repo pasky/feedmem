@@ -389,6 +389,7 @@ async def list_tweets(
     *,
     interaction_type: str | None = None,
     limit: int = 50,
+    offset: int = 0,
 ) -> list[SearchResult]:
     sql = """
         WITH latest_interaction AS (
@@ -414,9 +415,10 @@ async def list_tweets(
         sql += " WHERE i.type IS NOT NULL"
     sql += """
         ORDER BY COALESCE(i.timestamp, t.created_at) DESC
-        LIMIT ?
+        LIMIT ? OFFSET ?
     """
     params.append(limit)
+    params.append(offset)
 
     async with db.execute(sql, params) as cursor:
         rows = await cursor.fetchall()
@@ -450,6 +452,7 @@ async def search_tweets(
     *,
     interaction_type: str | None = None,
     limit: int = 50,
+    offset: int = 0,
 ) -> list[SearchResult]:
     sql = """
         WITH RECURSIVE matching_base AS (
@@ -497,9 +500,10 @@ async def search_tweets(
         sql += " WHERE i.type IS NOT NULL"
     sql += """
         ORDER BY t.created_at DESC
-        LIMIT ?
+        LIMIT ? OFFSET ?
     """
     params.append(limit)
+    params.append(offset)
 
     async with db.execute(sql, params) as cursor:
         rows = await cursor.fetchall()
